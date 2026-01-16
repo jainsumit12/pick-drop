@@ -15,7 +15,6 @@ export function ApiUsageExample() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Example 1: Login with API
   const handleLogin = async () => {
     try {
       setLoading(true);
@@ -26,7 +25,6 @@ export function ApiUsageExample() {
         password: 'admin123',
       });
 
-      // Dispatch to Redux store
       dispatch(login(response.user));
 
       console.log('Login successful:', response);
@@ -135,11 +133,9 @@ export function ApiUsageExample() {
       setLoading(true);
       setError(null);
 
-      const drivers = await driversService.getAllDrivers();
-      console.log('Drivers fetched:', drivers);
 
-      // Get drivers by shift
-      const morningDrivers = await driversService.getDriversByShift('Morning');
+
+      const morningDrivers = await driversService.getDriversByShift('2024-06-15', 'route-1', 'Morning');
       console.log('Morning drivers:', morningDrivers);
     } catch (err: any) {
       setError(err.message || 'Failed to fetch drivers');

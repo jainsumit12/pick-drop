@@ -18,38 +18,9 @@ import {
   Maximize2,
   Calendar,
 } from "lucide-react";
-import ridersData from "../../data/going-drivers.json";
-import passengersData from "../../data/going-passengers.json";
-import { SavedRoute, RouteInfo } from "../../types/route";
-
-interface Rider {
-  DRIVER_ID: string;
-  SHIFT: string;
-  DATE: string;
-  TIME: string;
-  DRIVER_NAME: string;
-  DRIVER_PHONE: string;
-  HOME_LOCATION: string;
-  DRIVER_SUBPOINT: string;
-  HOME_LAT: number | null;
-  HOME_LOG: number | null;
-}
-
-interface Passenger {
-  SHIFT: string;
-  DATE: string;
-  TIME: string;
-  NAME: string;
-  MOBILE: string | number;
-  PICKUP_LOCATION: string;
-  PICKUP_LAT: number | null;
-  PICKUP_LOG: number | null;
-  PICKUP_SUBPOINT: string;
-  DROP_LOCATION: string;
-  DROP_LAT: number | null;
-  DROP_LOG: number | null;
-  DROP_SUBPOINT: string;
-}
+import { driversService, passengersService } from "../../api/services";
+import { RouteParticipant, SavedRoute, RouteInfo } from "../../types/route";
+import { ShiftDriver, ShiftPassenger } from "../../types/transport";
 
 interface Location {
   id: string;
@@ -86,60 +57,89 @@ const extractId = (fullName: string, location?: string): string => {
   return `${nameStr}-${locStr}`.slice(0, 50);
 };
 
+const parseCoordinate = (value: number | string | null): number | null => {
+  if (value === null || value === undefined || value === "") return null;
+  const parsed = typeof value === "string" ? Number(value) : value;
+  return Number.isFinite(parsed) ? parsed : null;
+};
+
+const formatDateForApi = (date: string): string => {
+  const [year, month, day] = date.split("-");
+  if (!year || !month || !day) return date;
+  return `${day}-${month}-${year}`;
+};
+
+const toParticipantSnapshot = (location: Location): RouteParticipant => ({
+  id: location.id,
+  name: location.name,
+  phone: location.phone,
+  address: location.address,
+  subPoint: location.subPoint,
+  coordinates: location.coordinates,
+  destinationCoordinates: location.destinationCoordinates,
+  destination: location.destination,
+  destinationSubPoint: location.destinationSubPoint,
+});
+
 // Convert rider data to Location format
 const convertRidersToLocations = (
-  riders: Rider[],
+  riders: ShiftDriver[],
   shift: string
 ): Location[] => {
-  return riders
-    .filter(
-      (rider) =>
-        rider.SHIFT === shift &&
-        rider.HOME_LAT !== null &&
-        rider.HOME_LOG !== null
-    )
-    .map((rider) => ({
-      id: `${shift}-${extractId(rider.DRIVER_NAME, rider.HOME_LOCATION)}`,
-      name: extractCleanName(rider.DRIVER_NAME),
-      coordinates: [rider.HOME_LOG!, rider.HOME_LAT!],
-      type: "driver" as const,
-      phone: rider.DRIVER_PHONE,
-      address: rider.HOME_LOCATION,
-      subPoint: rider.DRIVER_SUBPOINT,
-      shiftTime: rider.SHIFT,
-      time: rider.TIME,
-    }));
+  return riders.flatMap((rider) => {
+    const lat = parseCoordinate(rider.HOME_LAT);
+    const log = parseCoordinate(rider.HOME_LOG);
+    if (rider.SHIFT !== shift || lat === null || log === null) return [];
+
+    return [
+      {
+        id: `${shift}-${extractId(rider.DRIVER_NAME, rider.HOME_LOCATION)}`,
+        name: extractCleanName(rider.DRIVER_NAME),
+        coordinates: [log, lat],
+        type: "driver" as const,
+        phone: rider.DRIVER_PHONE,
+        address: rider.HOME_LOCATION,
+        subPoint: rider.DRIVER_SUBPOINT,
+        shiftTime: rider.SHIFT,
+        time: rider.TIME,
+      },
+    ];
+  });
 };
 
 // Convert passenger data to Location format
 const convertPassengersToLocations = (
-  passengers: Passenger[],
+  passengers: ShiftPassenger[],
   shift: string
 ): Location[] => {
-  return passengers
-    .filter(
-      (passenger) =>
-        passenger.SHIFT === shift &&
-        passenger.PICKUP_LAT !== null &&
-        passenger.PICKUP_LOG !== null
-    )
-    .map((passenger, index) => ({
-      id: `passenger-${shift}-${passenger.NAME.replace(/\s+/g, "-")}-${index}`,
-      name: passenger.NAME,
-      coordinates: [passenger.PICKUP_LOG!, passenger.PICKUP_LAT!],
-      type: "passenger" as const,
-      phone: passenger.MOBILE.toString(),
-      address: passenger.PICKUP_LOCATION,
-      subPoint: passenger.PICKUP_SUBPOINT,
-      shiftTime: passenger.SHIFT,
-      time: passenger.TIME,
-      destinationCoordinates:
-        passenger.DROP_LOG && passenger.DROP_LAT
-          ? [passenger.DROP_LOG, passenger.DROP_LAT]
-          : undefined,
-      destination: passenger.DROP_LOCATION,
-      destinationSubPoint: passenger.DROP_SUBPOINT,
-    }));
+  return passengers.flatMap((passenger, index) => {
+    const pickupLat = parseCoordinate(passenger.PICKUP_LAT);
+    const pickupLog = parseCoordinate(passenger.PICKUP_LOG);
+    if (passenger.SHIFT !== shift || pickupLat === null || pickupLog === null) {
+      return [];
+    }
+
+    const dropLat = parseCoordinate(passenger.DROP_LAT);
+    const dropLog = parseCoordinate(passenger.DROP_LOG);
+
+    return [
+      {
+        id: `passenger-${shift}-${passenger.NAME.replace(/\s+/g, "-")}-${index}`,
+        name: passenger.NAME,
+        coordinates: [pickupLog, pickupLat],
+        type: "passenger" as const,
+        phone: passenger.MOBILE.toString(),
+        address: passenger.PICKUP_LOCATION,
+        subPoint: passenger.PICKUP_SUBPOINT,
+        shiftTime: passenger.SHIFT,
+        time: passenger.TIME,
+        destinationCoordinates:
+          dropLat !== null && dropLog !== null ? [dropLog, dropLat] : undefined,
+        destination: passenger.DROP_LOCATION,
+        destinationSubPoint: passenger.DROP_SUBPOINT,
+      },
+    ];
+  });
 };
 
 export function CreateRoute({ savedRoutes, onSaveRoute }: CreateRouteProps) {
@@ -157,6 +157,12 @@ export function CreateRoute({ savedRoutes, onSaveRoute }: CreateRouteProps) {
   const [isCalculating, setIsCalculating] = useState(false);
   const [routeColorIndex, setRouteColorIndex] = useState(0);
   const [distanceSaved, setDistanceSaved] = useState<number>(0); // Track distance saved by optimization
+  const [driversData, setDriversData] = useState<ShiftDriver[]>([]);
+  const [driversLoading, setDriversLoading] = useState(false);
+  const [driversError, setDriversError] = useState<string | null>(null);
+  const [passengersData, setPassengersData] = useState<ShiftPassenger[]>([]);
+  const [passengersLoading, setPassengersLoading] = useState(false);
+  const [passengersError, setPassengersError] = useState<string | null>(null);
 
   // Dropdown states
   const [showDriverDropdown, setShowDriverDropdown] = useState(false);
@@ -189,15 +195,84 @@ export function CreateRoute({ savedRoutes, onSaveRoute }: CreateRouteProps) {
     { primary: "#10b981", name: "Green" },
   ];
 
+  useEffect(() => {
+    let cancelled = false;
+    const loadDrivers = async () => {
+      try {
+        setDriversLoading(true);
+        setDriversError(null);
+        const formattedDate = formatDateForApi(selectedDate);
+        const shift = selectedShift.toLowerCase();
+        const data = await driversService.getDriversByShift(
+          formattedDate,
+          "going",
+          shift
+        );
+        if (!cancelled) {
+          setDriversData(Array.isArray(data) ? (data as ShiftDriver[]) : []);
+        }
+      } catch (error: any) {
+        if (!cancelled) {
+          setDriversError(error?.message || "Failed to load drivers");
+          setDriversData([]);
+        }
+      } finally {
+        if (!cancelled) {
+          setDriversLoading(false);
+        }
+      }
+    };
+
+    loadDrivers();
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedDate, selectedShift]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const loadPassengers = async () => {
+      try {
+        setPassengersLoading(true);
+        setPassengersError(null);
+        const shift = selectedShift.toLowerCase();
+        const data = await passengersService.getPassengersByShiftDateRoute(
+          selectedDate,
+          "going",
+          shift
+        );
+        if (!cancelled) {
+          setPassengersData(
+            Array.isArray(data) ? (data as ShiftPassenger[]) : []
+          );
+        }
+      } catch (error: any) {
+        if (!cancelled) {
+          setPassengersError(error?.message || "Failed to load passengers");
+          setPassengersData([]);
+        }
+      } finally {
+        if (!cancelled) {
+          setPassengersLoading(false);
+        }
+      }
+    };
+
+    loadPassengers();
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedDate, selectedShift]);
+
   // Get drivers for selected shift
   const drivers = convertRidersToLocations(
-    ridersData as Rider[],
+    driversData,
     selectedShift
   );
 
   // Get passengers for selected shift
   const passengers = convertPassengersToLocations(
-    passengersData as Passenger[],
+    passengersData,
     selectedShift
   );
 
@@ -221,7 +296,7 @@ export function CreateRoute({ savedRoutes, onSaveRoute }: CreateRouteProps) {
   );
 
   // Extract unique filter options from passenger data
-  const rawPassengerData = (passengersData as Passenger[]).filter(
+  const rawPassengerData = passengersData.filter(
     (p) => p.SHIFT === selectedShift
   );
   const pickupCities = [
@@ -238,13 +313,15 @@ export function CreateRoute({ savedRoutes, onSaveRoute }: CreateRouteProps) {
   ];
 
   // Extract unique driver times
-  const rawDriverData = (ridersData as Rider[]).filter(
-    (r) => r.SHIFT === selectedShift
-  );
+  const rawDriverData = driversData.filter((r) => r.SHIFT === selectedShift);
   const driverTimes = [
     "ALL",
     ...Array.from(
-      new Set(rawDriverData.map((r) => r.TIME).filter((t) => t !== "ALL"))
+      new Set(
+        rawDriverData
+          .map((r) => r.TIME)
+          .filter((t) => t && t !== "ALL")
+      )
     ).sort(),
   ];
 
@@ -365,6 +442,8 @@ export function CreateRoute({ savedRoutes, onSaveRoute }: CreateRouteProps) {
     selectedDriver,
     selectedPassengers,
     selectedShift,
+    driversData,
+    passengersData,
     pickupCityFilter,
     destinationCityFilter,
     timeFilter,
@@ -875,6 +954,11 @@ export function CreateRoute({ savedRoutes, onSaveRoute }: CreateRouteProps) {
     if (!selectedDriver || selectedPassengers.length === 0 || !routeInfo)
       return;
 
+    const driverSnapshot = currentDriver
+      ? toParticipantSnapshot(currentDriver)
+      : undefined;
+    const passengerSnapshots = currentPassengers.map(toParticipantSnapshot);
+
     const newRoute: SavedRoute = {
       id: `route-${Date.now()}`,
       name: `Route ${savedRoutes.length + 1}`,
@@ -885,6 +969,8 @@ export function CreateRoute({ savedRoutes, onSaveRoute }: CreateRouteProps) {
       visible: true,
       createdAt: new Date().toISOString(),
       routeType: "going", // Add route type for Going Route
+      driverSnapshot,
+      passengerSnapshots,
     };
 
     onSaveRoute(newRoute);
@@ -1156,7 +1242,15 @@ export function CreateRoute({ savedRoutes, onSaveRoute }: CreateRouteProps) {
                   )}
                 </div>
                 <div className="max-h-80 overflow-y-auto">
-                  {filteredDrivers.length === 0 ? (
+                  {driversLoading ? (
+                    <div className="px-4 py-8 text-center text-sm text-gray-500">
+                      Loading drivers...
+                    </div>
+                  ) : driversError ? (
+                    <div className="px-4 py-8 text-center text-sm text-gray-500">
+                      {driversError}
+                    </div>
+                  ) : filteredDrivers.length === 0 ? (
                     <div className="px-4 py-8 text-center text-sm text-gray-500">
                       No drivers found
                     </div>
@@ -1371,7 +1465,15 @@ export function CreateRoute({ savedRoutes, onSaveRoute }: CreateRouteProps) {
                   )}
                 </div>
                 <div className="max-h-80 overflow-y-auto">
-                  {filteredPassengers.length === 0 ? (
+                  {passengersLoading ? (
+                    <div className="px-4 py-8 text-center text-sm text-gray-500">
+                      Loading passengers...
+                    </div>
+                  ) : passengersError ? (
+                    <div className="px-4 py-8 text-center text-sm text-gray-500">
+                      {passengersError}
+                    </div>
+                  ) : filteredPassengers.length === 0 ? (
                     <div className="px-4 py-8 text-center text-sm text-gray-500">
                       No passengers found
                     </div>

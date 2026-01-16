@@ -4,6 +4,18 @@ export interface RouteInfo {
   route: any;
 }
 
+export interface RouteParticipant {
+  id: string;
+  name: string;
+  phone: string;
+  address: string;
+  subPoint: string;
+  coordinates: [number, number];
+  destinationCoordinates?: [number, number];
+  destination?: string;
+  destinationSubPoint?: string;
+}
+
 export interface SavedRoute {
   id: string;
   name: string;
@@ -14,4 +26,6 @@ export interface SavedRoute {
   visible: boolean;
   createdAt: string;
   routeType: 'going' | 'return' | 'pickup';
+  driverSnapshot?: RouteParticipant;
+  passengerSnapshots?: RouteParticipant[];
 }

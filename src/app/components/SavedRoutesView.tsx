@@ -10,36 +10,13 @@ import returnDriversData from '../../data/return-drivers.json';
 import goingPassengersData from '../../data/going-passengers.json';
 import returnPassengersData from '../../data/return-passengers.json';
 import * as XLSX from 'xlsx';
-import { SavedRoute } from '../../types/route';
+import { RouteParticipant, SavedRoute } from '../../types/route';
+import { ShiftDriver, ShiftPassenger } from '../../types/transport';
 
 interface SavedRoutesViewProps {
   savedRoutes: SavedRoute[];
   onDeleteRoute: (routeId: string) => void;
   onToggleVisibility: (routeId: string) => void;
-}
-
-interface Rider {
-  SHIFT: string;
-  DATE: string;
-  TIME: string;
-  DRIVER_NAME: string;
-  HOME_LOCATION: string;
-  HOME_LAT: number | null;
-  HOME_LOG: number | null;
-}
-
-interface Passenger {
-  SHIFT: string;
-  DATE: string;
-  TIME: string;
-  NAME: string;
-  MOBILE: string | number;
-  PICKUP_LOCATION: string;
-  PICKUP_LAT: number | null;
-  PICKUP_LOG: number | null;
-  DROP_LOCATION: string;
-  DROP_LAT: number | null;
-  DROP_LOG: number | null;
 }
 
 interface Location {
@@ -55,6 +32,7 @@ interface Location {
   destination?: string;
   destinationSubPoint?: string;
 }
+type RouteParticipantLike = Location | RouteParticipant;
 
 // Helper function to extract clean name from rider name field
 const extractCleanName = (fullName: string = ''): string => {
@@ -74,41 +52,48 @@ const extractId = (fullName: string = '', location?: string): string => {
   return `${nameStr}-${locStr}`.slice(0, 50);
 };
 
+const parseCoordinate = (value: number | string | null): number | null => {
+  if (value === null || value === undefined || value === '') return null;
+  const parsed = typeof value === 'string' ? Number(value) : value;
+  return Number.isFinite(parsed) ? parsed : null;
+};
+
 // Convert rider data to Location format
-const convertRidersToLocations = (riders: Rider[]): Location[] => {
-  return riders
-    .filter(rider => 
-      rider.HOME_LAT !== null && 
-      rider.HOME_LOG !== null
-    )
-    .map(rider => {
-      // Extract phone number if it exists in driver name (format: Name - Phone)
-      const phoneMatch = rider.DRIVER_NAME.match(/- (\d+)/);
-      const phone = phoneMatch ? phoneMatch[1] : '';
-      
-      return {
+const convertRidersToLocations = (riders: ShiftDriver[]): Location[] => {
+  return riders.flatMap((rider) => {
+    const lat = parseCoordinate(rider.HOME_LAT);
+    const log = parseCoordinate(rider.HOME_LOG);
+    if (lat === null || log === null) return [];
+
+    const phoneMatch = rider.DRIVER_NAME.match(/- (\d+)/);
+    const phone = rider.DRIVER_PHONE || (phoneMatch ? phoneMatch[1] : '');
+
+    return [
+      {
         id: `${rider.SHIFT}-${extractId(rider.DRIVER_NAME, rider.HOME_LOCATION)}`,
         name: extractCleanName(rider.DRIVER_NAME),
-        coordinates: [rider.HOME_LOG!, rider.HOME_LAT!],
+        coordinates: [log, lat],
         type: 'driver' as const,
         phone: phone,
         address: rider.HOME_LOCATION,
-        subPoint: rider.HOME_LOCATION,
+        subPoint: rider.DRIVER_SUBPOINT || rider.HOME_LOCATION,
         shiftTime: rider.SHIFT
-      };
-    });
+      },
+    ];
+  });
 };
 
 // Convert passenger data to Location format for GOING routes
-const convertGoingPassengersToLocations = (passengers: Passenger[]): Location[] => {
+const convertGoingPassengersToLocations = (passengers: ShiftPassenger[]): Location[] => {
   // Group by shift to maintain correct index per shift
-  const passengersByShift: { [key: string]: Passenger[] } = {};
+  const passengersByShift: { [key: string]: ShiftPassenger[] } = {};
   
   passengers
-    .filter(passenger => 
-      passenger.PICKUP_LAT !== null && 
-      passenger.PICKUP_LOG !== null
-    )
+    .filter(passenger => {
+      const pickupLat = parseCoordinate(passenger.PICKUP_LAT);
+      const pickupLog = parseCoordinate(passenger.PICKUP_LOG);
+      return pickupLat !== null && pickupLog !== null;
+    })
     .forEach(passenger => {
       if (!passengersByShift[passenger.SHIFT]) {
         passengersByShift[passenger.SHIFT] = [];
@@ -123,15 +108,25 @@ const convertGoingPassengersToLocations = (passengers: Passenger[]): Location[] 
       allLocations.push({
         id: `passenger-${shift}-${passenger.NAME.replace(/\s+/g, '-')}-${index}`,
         name: extractCleanName(passenger.NAME),
-        coordinates: [passenger.PICKUP_LOG!, passenger.PICKUP_LAT!],
+        coordinates: [
+          parseCoordinate(passenger.PICKUP_LOG)!,
+          parseCoordinate(passenger.PICKUP_LAT)!
+        ],
         type: 'passenger' as const,
         phone: passenger.MOBILE.toString(),
         address: passenger.PICKUP_LOCATION,
-        subPoint: passenger.PICKUP_LOCATION,
+        subPoint: passenger.PICKUP_SUBPOINT || passenger.PICKUP_LOCATION,
         shiftTime: passenger.SHIFT,
-        destinationCoordinates: passenger.DROP_LOG && passenger.DROP_LAT ? [passenger.DROP_LOG, passenger.DROP_LAT] : undefined,
+        destinationCoordinates:
+          parseCoordinate(passenger.DROP_LOG) !== null &&
+          parseCoordinate(passenger.DROP_LAT) !== null
+            ? [
+                parseCoordinate(passenger.DROP_LOG)!,
+                parseCoordinate(passenger.DROP_LAT)!
+              ]
+            : undefined,
         destination: passenger.DROP_LOCATION,
-        destinationSubPoint: passenger.DROP_LOCATION
+        destinationSubPoint: passenger.DROP_SUBPOINT || passenger.DROP_LOCATION
       });
     });
   });
@@ -140,17 +135,23 @@ const convertGoingPassengersToLocations = (passengers: Passenger[]): Location[] 
 };
 
 // Convert passenger data to Location format for RETURN routes
-const convertReturnPassengersToLocations = (passengers: Passenger[]): Location[] => {
+const convertReturnPassengersToLocations = (passengers: ShiftPassenger[]): Location[] => {
   // Group by shift to maintain correct index per shift
-  const passengersByShift: { [key: string]: Passenger[] } = {};
+  const passengersByShift: { [key: string]: ShiftPassenger[] } = {};
   
   passengers
-    .filter(passenger => 
-      passenger.PICKUP_LAT !== null && 
-      passenger.PICKUP_LOG !== null &&
-      passenger.DROP_LAT !== null &&
-      passenger.DROP_LOG !== null
-    )
+    .filter(passenger => {
+      const pickupLat = parseCoordinate(passenger.PICKUP_LAT);
+      const pickupLog = parseCoordinate(passenger.PICKUP_LOG);
+      const dropLat = parseCoordinate(passenger.DROP_LAT);
+      const dropLog = parseCoordinate(passenger.DROP_LOG);
+      return (
+        pickupLat !== null &&
+        pickupLog !== null &&
+        dropLat !== null &&
+        dropLog !== null
+      );
+    })
     .forEach(passenger => {
       if (!passengersByShift[passenger.SHIFT]) {
         passengersByShift[passenger.SHIFT] = [];
@@ -165,15 +166,21 @@ const convertReturnPassengersToLocations = (passengers: Passenger[]): Location[]
       allLocations.push({
         id: `passenger-${shift}-${passenger.NAME.replace(/\s+/g, '-')}-${index}`,
         name: extractCleanName(passenger.NAME),
-        coordinates: [passenger.PICKUP_LOG!, passenger.PICKUP_LAT!], // Factory location
+        coordinates: [
+          parseCoordinate(passenger.PICKUP_LOG)!,
+          parseCoordinate(passenger.PICKUP_LAT)!
+        ], // Factory location
         type: 'passenger' as const,
         phone: passenger.MOBILE.toString(),
         address: passenger.PICKUP_LOCATION,
-        subPoint: passenger.PICKUP_LOCATION,
+        subPoint: passenger.PICKUP_SUBPOINT || passenger.PICKUP_LOCATION,
         shiftTime: passenger.SHIFT,
-        destinationCoordinates: [passenger.DROP_LOG!, passenger.DROP_LAT!], // Home location
+        destinationCoordinates: [
+          parseCoordinate(passenger.DROP_LOG)!,
+          parseCoordinate(passenger.DROP_LAT)!
+        ], // Home location
         destination: passenger.DROP_LOCATION,
-        destinationSubPoint: passenger.DROP_LOCATION
+        destinationSubPoint: passenger.DROP_SUBPOINT || passenger.DROP_LOCATION
       });
     });
   });
@@ -194,14 +201,29 @@ export function SavedRoutesView({ savedRoutes, onDeleteRoute, onToggleVisibility
   const [expandedRoutes, setExpandedRoutes] = useState<Set<string>>(new Set());
 
   // Convert all drivers to locations with IDs
-  const allDrivers = convertRidersToLocations([...goingDriversData as Rider[], ...returnDriversData as Rider[]]);
+  const allDrivers = convertRidersToLocations([
+    ...(goingDriversData as ShiftDriver[]),
+    ...(returnDriversData as ShiftDriver[]),
+  ]);
   
   // Convert passengers separately for going and return routes
-  const allGoingPassengers = convertGoingPassengersToLocations(goingPassengersData as Passenger[]);
-  const allReturnPassengers = convertReturnPassengersToLocations(returnPassengersData as Passenger[]);
+  const allGoingPassengers = convertGoingPassengersToLocations(
+    goingPassengersData as ShiftPassenger[]
+  );
+  const allReturnPassengers = convertReturnPassengersToLocations(
+    returnPassengersData as ShiftPassenger[]
+  );
   
   // Use the appropriate passenger dataset based on active tab
   const allPassengers = activeTab === 'going' ? allGoingPassengers : allReturnPassengers;
+
+  const getDriverForRoute = (route: SavedRoute): RouteParticipantLike | undefined =>
+    route.driverSnapshot || allDrivers.find((d) => d.id === route.driverId);
+
+  const getPassengersForRoute = (route: SavedRoute): RouteParticipantLike[] =>
+    route.passengerSnapshots && route.passengerSnapshots.length > 0
+      ? route.passengerSnapshots
+      : allPassengers.filter((p) => route.passengerIds.includes(p.id));
 
   useEffect(() => {
     if (!mapContainer.current || map.current) return;
@@ -294,7 +316,7 @@ export function SavedRoutesView({ savedRoutes, onDeleteRoute, onToggleVisibility
       }
 
       // Add driver marker
-      const driverData = allDrivers.find(d => d.id === route.driverId);
+      const driverData = getDriverForRoute(route);
       if (driverData) {
         const el = document.createElement('div');
         el.style.width = '36px';
@@ -332,7 +354,7 @@ export function SavedRoutesView({ savedRoutes, onDeleteRoute, onToggleVisibility
       }
 
       // Add passenger markers
-      const passengerDataList = allPassengers.filter(p => route.passengerIds.includes(p.id));
+      const passengerDataList = getPassengersForRoute(route);
       passengerDataList.forEach(passenger => {
         // Pickup marker
         const el = document.createElement('div');
@@ -417,13 +439,13 @@ export function SavedRoutesView({ savedRoutes, onDeleteRoute, onToggleVisibility
       routesToShow.forEach(route => {
         if (!route.visible) return;
         
-        const driverData = allDrivers.find(d => d.id === route.driverId);
+        const driverData = getDriverForRoute(route);
         if (driverData && driverData.coordinates && driverData.coordinates.length === 2) {
           bounds.extend(driverData.coordinates);
           hasValidCoordinates = true;
         }
         
-        const passengerDataList = allPassengers.filter(p => route.passengerIds.includes(p.id));
+        const passengerDataList = getPassengersForRoute(route);
         passengerDataList.forEach(passenger => {
           if (passenger.coordinates && passenger.coordinates.length === 2) {
             bounds.extend(passenger.coordinates);
@@ -484,9 +506,8 @@ export function SavedRoutesView({ savedRoutes, onDeleteRoute, onToggleVisibility
     const excelData: any[] = [];
     
     routesToExport.forEach((route) => {
-      const driverData = allDrivers.find(d => d.id === route.driverId);
-      const passengers = routeType === 'going' ? allGoingPassengers : allReturnPassengers;
-      const passengerDataList = passengers.filter(p => route.passengerIds.includes(p.id));
+      const driverData = getDriverForRoute(route);
+      const passengerDataList = getPassengersForRoute(route);
       
       // Add route summary row
       excelData.push({
@@ -598,8 +619,8 @@ export function SavedRoutesView({ savedRoutes, onDeleteRoute, onToggleVisibility
       <div className="space-y-3">
         {routes.map(route => {
           // Find driver and passengers using the generated IDs
-          const driverData = allDrivers.find(d => d.id === route.driverId);
-          const passengerDataList = allPassengers.filter(p => route.passengerIds.includes(p.id));
+          const driverData = getDriverForRoute(route);
+          const passengerDataList = getPassengersForRoute(route);
           const isExpanded = expandedRoutes.has(route.id);
           
           return (

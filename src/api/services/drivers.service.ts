@@ -1,46 +1,21 @@
 import axiosInstance from "../axios";
-
-export interface Driver {
-  driver_id: number;
-  name: string;
-  mobile: string;
-  going_afternoon: string; // empty string allowed
-  going_morning: string; // empty string allowed
-  postal_code: string;
-  city: string;
-  subpoint: string;
-  address: string;
-  lat: string;   // keeping as string since API sends string
-  long: string;  // same here
-}
-
-interface Passenger {
-  id: string;
-  SHIFT: string;
-  DATE: string;
-  TIME: string;
-  NAME: string;
-  MOBILE: string | number;
-  PICKUP_LOCATION: string;
-  PICKUP_LAT: number | null;
-  PICKUP_LOG: number | null;
-  PICKUP_SUBPOINT: string;
-  DROP_LOCATION: string;
-  DROP_LAT: number | null;
-  DROP_LOG: number | null;
-  DROP_SUBPOINT: string;
-}
+import { Driver, Passenger, ShiftDriver, ShiftPassenger } from "../../types/transport";
 
 export const driversService = {
-  getAllDrivers: async (
+  getDriversByShift: async (
     date: string,
     route: string,
     shift?: string
-  ): Promise<Driver[]> => {
-    const response = await axiosInstance.get<Driver[]>(
+  ): Promise<ShiftDriver[]> => {
+    const response = await axiosInstance.get<
+      ShiftDriver[] | { data: ShiftDriver[] }
+    >(
       `exportdrivershift/${route}/${shift}/${date}`
     );
-    return response.data;
+    if (Array.isArray(response.data)) {
+      return response.data;
+    }
+    return response.data?.data ?? [];
   },
 };
 
@@ -57,5 +32,19 @@ export const passengersService = {
       params: { shift },
     });
     return response.data;
+  },
+
+  getPassengersByShiftDateRoute: async (
+    date: string,
+    route: string,
+    shift?: string
+  ): Promise<ShiftPassenger[]> => {
+    const response = await axiosInstance.get<
+      ShiftPassenger[] | { data: ShiftPassenger[] }
+    >(`exportbooking/${route}/${shift}/${date}`);
+    if (Array.isArray(response.data)) {
+      return response.data;
+    }
+    return response.data?.data ?? [];
   },
 };

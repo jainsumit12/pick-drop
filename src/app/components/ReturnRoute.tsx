@@ -2,39 +2,10 @@ import { useEffect, useRef, useState } from 'react';
 import mapboxgl from 'mapbox-gl';
 import { Button } from './ui/button';
 import { Badge } from './ui/badge';
-import { Car, Users, Clock, Save, X, ChevronDown, Search, MapPin, Phone, Navigation, ZoomIn, ZoomOut, Maximize2, Home, Building2 } from 'lucide-react';
-import ridersData from '../../data/return-drivers.json';
-import passengersData from '../../data/return-passengers.json';
-import { SavedRoute, RouteInfo } from '../../types/route';
-
-interface Rider {
-  DRIVER_ID: string;
-  SHIFT: string;
-  DATE: string;
-  TIME: string;
-  DRIVER_NAME: string;
-  DRIVER_PHONE: string;
-  HOME_LOCATION: string;
-  DRIVER_SUBPOINT: string;
-  HOME_LAT: number | null;
-  HOME_LOG: number | null;
-}
-
-interface Passenger {
-  SHIFT: string;
-  DATE: string;
-  TIME: string;
-  NAME: string;
-  MOBILE: string | number;
-  PICKUP_LOCATION: string;
-  PICKUP_SUBPOINT: string;
-  PICKUP_LAT: number | null;
-  PICKUP_LOG: number | null;
-  DROP_LOCATION: string;
-  DROP_SUBPOINT: string;
-  DROP_LAT: number | null;
-  DROP_LOG: number | null;
-}
+import { Car, Users, Clock, Save, X, ChevronDown, Search, MapPin, Phone, Navigation, ZoomIn, ZoomOut, Maximize2, Home, Building2, Calendar } from 'lucide-react';
+import { driversService, passengersService } from '../../api/services';
+import { RouteParticipant, SavedRoute, RouteInfo } from '../../types/route';
+import { ShiftDriver, ShiftPassenger } from '../../types/transport';
 
 interface Location {
   id: string;
@@ -73,6 +44,30 @@ const extractId = (fullName: string, location?: string): string => {
   return `${nameStr}-${locStr}`.slice(0, 50);
 };
 
+const parseCoordinate = (value: number | string | null): number | null => {
+  if (value === null || value === undefined || value === '') return null;
+  const parsed = typeof value === 'string' ? Number(value) : value;
+  return Number.isFinite(parsed) ? parsed : null;
+};
+
+const formatDateForApi = (date: string): string => {
+  const [year, month, day] = date.split('-');
+  if (!year || !month || !day) return date;
+  return `${day}-${month}-${year}`;
+};
+
+const toParticipantSnapshot = (location: Location): RouteParticipant => ({
+  id: location.id,
+  name: location.name,
+  phone: location.phone,
+  address: location.address,
+  subPoint: location.subPoint,
+  coordinates: location.coordinates,
+  destinationCoordinates: location.destinationCoordinates,
+  destination: location.destination,
+  destinationSubPoint: location.destinationSubPoint,
+});
+
 // Generate unique color for each passenger using HSL
 const generateUniqueColor = (index: number, total: number): string => {
   const hue = (index * 360) / total;
@@ -82,48 +77,69 @@ const generateUniqueColor = (index: number, total: number): string => {
 };
 
 // Convert rider data to Location format
-const convertRidersToLocations = (riders: Rider[], shift: string): Location[] => {
-  return riders
-    .filter(rider => 
-      rider.SHIFT === shift && 
-      rider.HOME_LAT !== null && 
-      rider.HOME_LOG !== null
-    )
-    .map(rider => ({
-      id: `${shift}-${extractId(rider.DRIVER_NAME, rider.HOME_LOCATION)}`,
-      name: extractCleanName(rider.DRIVER_NAME),
-      coordinates: [rider.HOME_LOG!, rider.HOME_LAT!],
-      type: 'driver' as const,
-      phone: rider.DRIVER_PHONE,
-      address: rider.HOME_LOCATION,
-      subPoint: rider.DRIVER_SUBPOINT,
-      shiftTime: rider.SHIFT,
-      time: rider.TIME
-    }));
+const convertRidersToLocations = (riders: ShiftDriver[], shift: string): Location[] => {
+  return riders.flatMap((rider) => {
+    const lat = parseCoordinate(rider.HOME_LAT);
+    const log = parseCoordinate(rider.HOME_LOG);
+    if (rider.SHIFT !== shift || lat === null || log === null) return [];
+
+    return [
+      {
+        id: `${shift}-${extractId(rider.DRIVER_NAME, rider.HOME_LOCATION)}`,
+        name: extractCleanName(rider.DRIVER_NAME),
+        coordinates: [log, lat],
+        type: 'driver' as const,
+        phone: rider.DRIVER_PHONE,
+        address: rider.HOME_LOCATION,
+        subPoint: rider.DRIVER_SUBPOINT,
+        shiftTime: rider.SHIFT,
+        time: rider.TIME
+      },
+    ];
+  });
 };
 
 // Convert passenger data to Location format for RETURN route
 // For Return Route: PICKUP_LOCATION = Factory (current), DROP_LOCATION = Home (destination)
-const convertPassengersToLocations = (passengers: Passenger[], shift: string): Location[] => {
-  const filteredPassengers = passengers.filter(passenger => 
-    passenger.SHIFT === shift && 
-    passenger.PICKUP_LAT !== null && 
-    passenger.PICKUP_LOG !== null &&
-    passenger.DROP_LAT !== null &&
-    passenger.DROP_LOG !== null
-  );
+const convertPassengersToLocations = (passengers: ShiftPassenger[], shift: string): Location[] => {
+  const filteredPassengers = passengers.flatMap((passenger) => {
+    const pickupLat = parseCoordinate(passenger.PICKUP_LAT);
+    const pickupLog = parseCoordinate(passenger.PICKUP_LOG);
+    const dropLat = parseCoordinate(passenger.DROP_LAT);
+    const dropLog = parseCoordinate(passenger.DROP_LOG);
+
+    if (
+      passenger.SHIFT !== shift ||
+      pickupLat === null ||
+      pickupLog === null ||
+      dropLat === null ||
+      dropLog === null
+    ) {
+      return [];
+    }
+
+    return [
+      {
+        ...passenger,
+        PICKUP_LAT: pickupLat,
+        PICKUP_LOG: pickupLog,
+        DROP_LAT: dropLat,
+        DROP_LOG: dropLog,
+      },
+    ];
+  });
 
   return filteredPassengers.map((passenger, index) => ({
     id: `passenger-${shift}-${passenger.NAME.replace(/\s+/g, '-')}-${index}`,
     name: passenger.NAME,
-    coordinates: [passenger.PICKUP_LOG!, passenger.PICKUP_LAT!], // Currently at factory
+    coordinates: [passenger.PICKUP_LOG as number, passenger.PICKUP_LAT as number], // Currently at factory
     type: 'passenger' as const,
     phone: passenger.MOBILE.toString(),
     address: passenger.PICKUP_LOCATION,
     subPoint: passenger.PICKUP_SUBPOINT,
     shiftTime: passenger.SHIFT,
     time: passenger.TIME,
-    destinationCoordinates: [passenger.DROP_LOG!, passenger.DROP_LAT!], // Going home
+    destinationCoordinates: [passenger.DROP_LOG as number, passenger.DROP_LAT as number], // Going home
     destination: passenger.DROP_LOCATION,
     destinationSubPoint: passenger.DROP_SUBPOINT,
     color: generateUniqueColor(index, filteredPassengers.length)
@@ -136,16 +152,26 @@ export function ReturnRoute({ savedRoutes, onSaveRoute }: ReturnRouteProps) {
   const markersRef = useRef<mapboxgl.Marker[]>([]);
   
   const [selectedShift, setSelectedShift] = useState<string>('Morning');
+  const [selectedDate, setSelectedDate] = useState<string>(
+    new Date().toISOString().split('T')[0]
+  );
   const [selectedDriver, setSelectedDriver] = useState<string | null>(null);
   const [selectedPassengers, setSelectedPassengers] = useState<string[]>([]);
   const [routeInfo, setRouteInfo] = useState<RouteInfo | null>(null);
   const [isCalculating, setIsCalculating] = useState(false);
   const [routeColorIndex, setRouteColorIndex] = useState(0);
+  const [driversData, setDriversData] = useState<ShiftDriver[]>([]);
+  const [driversLoading, setDriversLoading] = useState(false);
+  const [driversError, setDriversError] = useState<string | null>(null);
+  const [passengersData, setPassengersData] = useState<ShiftPassenger[]>([]);
+  const [passengersLoading, setPassengersLoading] = useState(false);
+  const [passengersError, setPassengersError] = useState<string | null>(null);
   
   // Dropdown states
   const [showDriverDropdown, setShowDriverDropdown] = useState(false);
   const [showPassengerDropdown, setShowPassengerDropdown] = useState(false);
   const [showShiftDropdown, setShowShiftDropdown] = useState(false);
+  const [showDateDropdown, setShowDateDropdown] = useState(false);
   const [driverSearch, setDriverSearch] = useState('');
   const [passengerSearch, setPassengerSearch] = useState('');
   
@@ -154,8 +180,7 @@ export function ReturnRoute({ savedRoutes, onSaveRoute }: ReturnRouteProps) {
   const [destinationCityFilter, setDestinationCityFilter] = useState<string>('All');
   const [timeFilter, setTimeFilter] = useState<string[]>([]); // Passenger time filter
   const [driverTimeFilter, setDriverTimeFilter] = useState<string[]>([]); // Driver time filter
-  const [showPickupCityDropdown, setShowPickupCityDropdown] = useState(false);
-  const [showDestinationCityDropdown, setShowDestinationCityDropdown] = useState(false);
+
   const [showTimeDropdown, setShowTimeDropdown] = useState(false);
   const [showDriverTimeDropdown, setShowDriverTimeDropdown] = useState(false);
   
@@ -172,11 +197,80 @@ export function ReturnRoute({ savedRoutes, onSaveRoute }: ReturnRouteProps) {
     { primary: '#10b981', name: 'Green' },
   ];
 
+  useEffect(() => {
+    let cancelled = false;
+    const loadDrivers = async () => {
+      try {
+        setDriversLoading(true);
+        setDriversError(null);
+        const formattedDate = formatDateForApi(selectedDate);
+        const shift = selectedShift.toLowerCase();
+        const data = await driversService.getDriversByShift(
+          formattedDate,
+          'return',
+          shift
+        );
+        if (!cancelled) {
+          setDriversData(Array.isArray(data) ? (data as ShiftDriver[]) : []);
+        }
+      } catch (error: any) {
+        if (!cancelled) {
+          setDriversError(error?.message || 'Failed to load drivers');
+          setDriversData([]);
+        }
+      } finally {
+        if (!cancelled) {
+          setDriversLoading(false);
+        }
+      }
+    };
+
+    loadDrivers();
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedDate, selectedShift]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const loadPassengers = async () => {
+      try {
+        setPassengersLoading(true);
+        setPassengersError(null);
+        const shift = selectedShift.toLowerCase();
+        const data = await passengersService.getPassengersByShiftDateRoute(
+          selectedDate,
+          'return',
+          shift
+        );
+        if (!cancelled) {
+          setPassengersData(
+            Array.isArray(data) ? (data as ShiftPassenger[]) : []
+          );
+        }
+      } catch (error: any) {
+        if (!cancelled) {
+          setPassengersError(error?.message || 'Failed to load passengers');
+          setPassengersData([]);
+        }
+      } finally {
+        if (!cancelled) {
+          setPassengersLoading(false);
+        }
+      }
+    };
+
+    loadPassengers();
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedDate, selectedShift]);
+
   // Get drivers for selected shift
-  const drivers = convertRidersToLocations(ridersData as Rider[], selectedShift);
+  const drivers = convertRidersToLocations(driversData, selectedShift);
   
   // Get passengers for selected shift
-  const passengers = convertPassengersToLocations(passengersData as Passenger[], selectedShift);
+  const passengers = convertPassengersToLocations(passengersData, selectedShift);
   
   // Filter out drivers and passengers that are already used in saved RETURN routes only
   const usedDriverIds = new Set(savedRoutes.filter(route => route.routeType === 'return').map(route => route.driverId));
@@ -186,13 +280,13 @@ export function ReturnRoute({ savedRoutes, onSaveRoute }: ReturnRouteProps) {
   const availablePassengers = passengers.filter(passenger => !usedPassengerIds.has(passenger.id));
   
   // Extract unique filter options from passenger data (for Return: factory locations are "pickup", home locations are "destination")
-  const rawPassengerData = (passengersData as Passenger[]).filter(p => p.SHIFT === selectedShift);
+  const rawPassengerData = passengersData.filter(p => p.SHIFT === selectedShift);
   const pickupCities = ['All', ...Array.from(new Set(rawPassengerData.map(p => p.PICKUP_SUBPOINT)))]; // Factory locations
   const destinationCities = ['All', ...Array.from(new Set(rawPassengerData.map(p => p.DROP_SUBPOINT)))]; // Home locations
   const times = ['All', ...Array.from(new Set(rawPassengerData.map(p => p.TIME))).sort()];
   
   // Extract unique driver times
-  const rawDriverData = (ridersData as Rider[]).filter(r => r.SHIFT === selectedShift);
+  const rawDriverData = driversData.filter(r => r.SHIFT === selectedShift);
   const driverTimes = ['ALL', ...Array.from(new Set(rawDriverData.map(r => r.TIME).filter(t => t !== 'ALL'))).sort()];
   
   // Filter drivers and passengers based on search
@@ -268,6 +362,7 @@ export function ReturnRoute({ savedRoutes, onSaveRoute }: ReturnRouteProps) {
         setShowDriverDropdown(false);
         setShowPassengerDropdown(false);
         setShowShiftDropdown(false);
+        setShowDateDropdown(false);
       }
     };
 
@@ -286,7 +381,7 @@ export function ReturnRoute({ savedRoutes, onSaveRoute }: ReturnRouteProps) {
     }
 
     updateMarkersAndRoute();
-  }, [selectedDriver, selectedPassengers, selectedShift, pickupCityFilter, destinationCityFilter, timeFilter, driverTimeFilter, passengerSearch, driverSearch]);
+  }, [selectedDriver, selectedPassengers, selectedShift, driversData, passengersData, pickupCityFilter, destinationCityFilter, timeFilter, driverTimeFilter, passengerSearch, driverSearch]);
 
   const updateMarkersAndRoute = () => {
     if (!map.current) return;
@@ -688,6 +783,11 @@ export function ReturnRoute({ savedRoutes, onSaveRoute }: ReturnRouteProps) {
   const saveRoute = () => {
     if (!selectedDriver || selectedPassengers.length === 0 || !routeInfo) return;
 
+    const driverSnapshot = currentDriver
+      ? toParticipantSnapshot(currentDriver)
+      : undefined;
+    const passengerSnapshots = currentPassengers.map(toParticipantSnapshot);
+
     const newRoute: SavedRoute = {
       id: `route-${Date.now()}`,
       name: `Return Route ${savedRoutes.length + 1}`,
@@ -697,7 +797,9 @@ export function ReturnRoute({ savedRoutes, onSaveRoute }: ReturnRouteProps) {
       color: routeColors[routeColorIndex],
       visible: true,
       createdAt: new Date().toISOString(),
-      routeType: 'return' // Add route type for Return Route
+      routeType: 'return', // Add route type for Return Route
+      driverSnapshot,
+      passengerSnapshots,
     };
 
     onSaveRoute(newRoute);
@@ -740,11 +842,77 @@ export function ReturnRoute({ savedRoutes, onSaveRoute }: ReturnRouteProps) {
       {/* Top Navigation Bar */}
       <div className="bg-white border-b shadow-sm z-30 relative">
         <div className="flex items-center gap-3 px-4 py-3">
+          {/* Date Selector */}
+          <div className="relative dropdown-container">
+            <button
+              onClick={() => {
+                setShowDateDropdown(!showDateDropdown);
+                setShowShiftDropdown(false);
+                setShowDriverDropdown(false);
+                setShowPassengerDropdown(false);
+              }}
+              className="flex items-center gap-2 px-4 py-2 bg-white border rounded-lg hover:bg-gray-50 transition-colors min-w-[160px]"
+            >
+              <Calendar className="w-4 h-4 text-gray-600" />
+              <span className="font-medium text-sm">{selectedDate}</span>
+              <ChevronDown className="w-4 h-4 text-gray-400" />
+            </button>
+            
+            {showDateDropdown && (
+              <div className="absolute top-full mt-1 bg-white border rounded-lg shadow-lg w-72 p-4 z-30">
+                <div className="mb-3">
+                  <label className="block text-xs font-medium text-gray-700 mb-2">
+                    Select Date
+                  </label>
+                  <input
+                    type="date"
+                    value={selectedDate}
+                    onChange={(e) => {
+                      setSelectedDate(e.target.value);
+                      setShowDateDropdown(false);
+                      clearSelections();
+                    }}
+                    className="w-full px-3 py-2 text-sm border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+                <div className="pt-3 border-t">
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      onClick={() => {
+                        setSelectedDate(new Date().toISOString().split('T')[0]);
+                        setShowDateDropdown(false);
+                        clearSelections();
+                      }}
+                      className="px-3 py-2 text-xs bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 transition-colors"
+                    >
+                      Today
+                    </button>
+                    <button
+                      onClick={() => {
+                        const tomorrow = new Date();
+                        tomorrow.setDate(tomorrow.getDate() + 1);
+                        setSelectedDate(tomorrow.toISOString().split('T')[0]);
+                        setShowDateDropdown(false);
+                        clearSelections();
+                      }}
+                      className="px-3 py-2 text-xs bg-gray-50 text-gray-600 rounded-lg hover:bg-gray-100 transition-colors"
+                    >
+                      Tomorrow
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+
+          <div className="w-px h-8 bg-gray-200"></div>
+
           {/* Shift Selector */}
           <div className="relative dropdown-container">
             <button
               onClick={() => {
                 setShowShiftDropdown(!showShiftDropdown);
+                setShowDateDropdown(false);
                 setShowDriverDropdown(false);
                 setShowPassengerDropdown(false);
               }}
@@ -783,6 +951,7 @@ export function ReturnRoute({ savedRoutes, onSaveRoute }: ReturnRouteProps) {
             <button
               onClick={() => {
                 setShowDriverDropdown(!showDriverDropdown);
+                setShowDateDropdown(false);
                 setShowShiftDropdown(false);
                 setShowPassengerDropdown(false);
               }}
@@ -888,7 +1057,15 @@ export function ReturnRoute({ savedRoutes, onSaveRoute }: ReturnRouteProps) {
                   )}
                 </div>
                 <div className="max-h-80 overflow-y-auto">
-                  {filteredDrivers.length === 0 ? (
+                  {driversLoading ? (
+                    <div className="px-4 py-8 text-center text-sm text-gray-500">
+                      Loading drivers...
+                    </div>
+                  ) : driversError ? (
+                    <div className="px-4 py-8 text-center text-sm text-gray-500">
+                      {driversError}
+                    </div>
+                  ) : filteredDrivers.length === 0 ? (
                     <div className="px-4 py-8 text-center text-sm text-gray-500">
                       No drivers found
                     </div>
@@ -938,6 +1115,7 @@ export function ReturnRoute({ savedRoutes, onSaveRoute }: ReturnRouteProps) {
             <button
               onClick={() => {
                 setShowPassengerDropdown(!showPassengerDropdown);
+                setShowDateDropdown(false);
                 setShowShiftDropdown(false);
                 setShowDriverDropdown(false);
               }}
@@ -1068,7 +1246,15 @@ export function ReturnRoute({ savedRoutes, onSaveRoute }: ReturnRouteProps) {
                   )}
                 </div>
                 <div className="max-h-80 overflow-y-auto">
-                  {filteredPassengers.length === 0 ? (
+                  {passengersLoading ? (
+                    <div className="px-4 py-8 text-center text-sm text-gray-500">
+                      Loading passengers...
+                    </div>
+                  ) : passengersError ? (
+                    <div className="px-4 py-8 text-center text-sm text-gray-500">
+                      {passengersError}
+                    </div>
+                  ) : filteredPassengers.length === 0 ? (
                     <div className="px-4 py-8 text-center text-sm text-gray-500">
                       No passengers found
                     </div>
