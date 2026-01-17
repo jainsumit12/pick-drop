@@ -8,7 +8,7 @@ import mapboxgl from 'mapbox-gl';
 import 'mapbox-gl/dist/mapbox-gl.css';
 
 // Set Mapbox access token globally
-mapboxgl.accessToken = import.meta.env.VITE_MAPBOX_ACCESS_TOKEN;
+mapboxgl.accessToken = "pk.eyJ1Ijoic2lkaHVkaGlsbG9udGVhbSIsImEiOiJjbTVwMm1mYXYwZ2k4MmtzMWhnbjQ1Z2E0In0.gK3s6yddFXNErt-IbgZ26g";
 
 interface User {
   username: string;
