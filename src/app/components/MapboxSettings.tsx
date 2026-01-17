@@ -171,7 +171,9 @@ export function MapboxSettings() {
                   </Button>
                   <Button 
                     onClick={handleSaveToken}
-                    disabled={!tempToken || (testResult && !testResult.success)}
+                    disabled={
+                      !tempToken || (!!testResult && !testResult.success)
+                    }
                   >
                     Save Token
                   </Button>

@@ -181,33 +181,6 @@ export function ApiUsageExample() {
     }
   };
 
-  // Example 9: Export routes
-  const handleExportRoutes = async (routeIds: string[]) => {
-    try {
-      setLoading(true);
-      setError(null);
-
-      const blob = await routesService.exportRoutes(routeIds);
-
-      // Create download link
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `routes-${Date.now()}.xlsx`;
-      document.body.appendChild(a);
-      a.click();
-      window.URL.revokeObjectURL(url);
-      document.body.removeChild(a);
-
-      console.log('Routes exported');
-    } catch (err: any) {
-      setError(err.message || 'Failed to export routes');
-      console.error('Export routes error:', err);
-    } finally {
-      setLoading(false);
-    }
-  };
-
   // Example 10: Using useEffect to fetch data on mount
   useEffect(() => {
     // Fetch routes when component mounts

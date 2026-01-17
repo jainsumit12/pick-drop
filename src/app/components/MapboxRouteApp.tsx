@@ -4,7 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
 import { Checkbox } from './ui/checkbox';
 import { Badge } from './ui/badge';
-import { User, MapPin, Route, Save, Trash2, Eye, EyeOff } from 'lucide-react';
+import { User, MapPin, Route, Trash2, Eye, EyeOff } from 'lucide-react';
 
 // Mapbox access token
 mapboxgl.accessToken = 'pk.eyJ1Ijoic2lkaHVkaGlsbG9udGVhbSIsImEiOiJjbTVwMm1mYXYwZ2k4MmtzMWhnbjQ1Z2E0In0.gK3s6yddFXNErt-IbgZ26g';

@@ -63,6 +63,17 @@ const parseCoordinate = (value: number | string | null): number | null => {
   return Number.isFinite(parsed) ? parsed : null;
 };
 
+const normalizeTime = (time: string): string => {
+  const trimmed = time.trim();
+  // Extract just the time part (HH:MM) from formats like "7:00 AM" or "7:00:00"
+  // Match pattern: digits:digits at the start of the string
+  const timeMatch = trimmed.match(/^(\d{1,2}:\d{2})/);
+  if (timeMatch) {
+    return timeMatch[1]; // Returns just "7:00" from "7:00 AM" or "7:00:00"
+  }
+  return trimmed;
+};
+
 const formatDateForApi = (date: string): string => {
   const [year, month, day] = date.split("-");
   if (!year || !month || !day) return date;
@@ -101,7 +112,7 @@ const convertRidersToLocations = (
         address: rider.HOME_LOCATION,
         subPoint: rider.DRIVER_SUBPOINT,
         shiftTime: rider.SHIFT,
-        time: rider.TIME,
+        time: normalizeTime(rider.TIME || ""),
       },
     ];
   });
@@ -314,16 +325,13 @@ export function CreateRoute({ savedRoutes, onSaveRoute }: CreateRouteProps) {
 
   // Extract unique driver times
   const rawDriverData = driversData.filter((r) => r.SHIFT === selectedShift);
-  const driverTimes = [
-    "ALL",
-    ...Array.from(
-      new Set(
-        rawDriverData
-          .map((r) => r.TIME)
-          .filter((t) => t && t !== "ALL")
-      )
-    ).sort(),
-  ];
+  const driverTimes = Array.from(
+    new Set(
+      rawDriverData
+        .map((r) => normalizeTime(r.TIME || ""))
+        .filter(Boolean)
+    )
+  ).sort();
 
   // Filter drivers and passengers based on search
   const filteredDrivers = availableDrivers.filter((d) => {
@@ -331,20 +339,26 @@ export function CreateRoute({ savedRoutes, onSaveRoute }: CreateRouteProps) {
       d.name.toLowerCase().includes(driverSearch.toLowerCase()) ||
       d.subPoint.toLowerCase().includes(driverSearch.toLowerCase());
 
-    // Find original driver data to check time
+    // Find original driver data to check time (same approach as passenger filter)
     const originalDriver = rawDriverData.find(
       (rd) =>
         extractCleanName(rd.DRIVER_NAME) === d.name &&
-        rd.HOME_LOCATION === d.subPoint
+        rd.DRIVER_SUBPOINT === d.subPoint
     );
 
-    // If no time filter selected, show all drivers
+    const originalTime = normalizeTime(originalDriver?.TIME || "");
+
+    // If no time filter selected, show all drivers that match search
     if (driverTimeFilter.length === 0) {
       return matchesSearch;
     }
 
-    // If time filter selected, show only drivers that match the selected times
-    const matchesTime = driverTimeFilter.includes(originalDriver?.TIME || "");
+    // If time filter selected, require the driver's time to be in the filter (match passenger logic)
+    const matchesTime =
+      originalTime !== "" &&
+      driverTimeFilter
+        .map((t) => normalizeTime(t))
+        .includes(originalTime);
 
     return matchesSearch && matchesTime;
   });
@@ -483,6 +497,7 @@ export function CreateRoute({ savedRoutes, onSaveRoute }: CreateRouteProps) {
 
       // Click handler to select driver
       el.addEventListener("click", () => {
+        popup.remove(); // keep popup hover-only
         setSelectedDriver(driver.id);
       });
 
@@ -560,6 +575,7 @@ export function CreateRoute({ savedRoutes, onSaveRoute }: CreateRouteProps) {
 
       // Click handler to toggle passenger selection
       el.addEventListener("click", () => {
+        pickupPopup.remove(); // keep popup hover-only
         togglePassenger(passenger.id);
       });
 
@@ -1165,22 +1181,17 @@ export function CreateRoute({ savedRoutes, onSaveRoute }: CreateRouteProps) {
                             Select Times
                           </span>
                           {driverTimeFilter.length > 0 && (
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setDriverTimeFilter([]);
-                              }}
-                              className="text-xs text-blue-600 hover:underline"
-                            >
-                              Clear all
-                            </button>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setDriverTimeFilter([]);
+                              setShowDriverTimeDropdown(false);
+                            }}
+                            className="text-xs text-blue-600 hover:underline"
+                          >
+                            Clear all
+                          </button>
                           )}
-                        </div>
-                        <div className="p-2 bg-blue-50 border-b">
-                          <p className="text-xs text-blue-700">
-                            <strong>Note:</strong> Drivers with TIME="ALL"
-                            always show
-                          </p>
                         </div>
                         {driverTimes.map((time) => (
                           <label
@@ -1193,28 +1204,23 @@ export function CreateRoute({ savedRoutes, onSaveRoute }: CreateRouteProps) {
                               checked={driverTimeFilter.includes(time)}
                               onChange={(e) => {
                                 e.stopPropagation();
-                                if (driverTimeFilter.includes(time)) {
-                                  setDriverTimeFilter(
-                                    driverTimeFilter.filter((t) => t !== time)
-                                  );
-                                } else {
-                                  setDriverTimeFilter([
-                                    ...driverTimeFilter,
-                                    time,
-                                  ]);
-                                }
+                                setDriverTimeFilter((prev) =>
+                                  prev.includes(time)
+                                    ? prev.filter((t) => t !== time)
+                                    : [...prev, time]
+                                );
+                                setShowDriverTimeDropdown(false);
                               }}
                               className="w-3.5 h-3.5 text-blue-600 rounded focus:ring-blue-500"
                             />
                             <span className="text-xs flex-1">
-                              {time === "ALL"
-                                ? "ALL (Not restricted to time)"
-                                : time.slice(0, 5)}
+                              {time}
                             </span>
                             <span className="text-xs text-gray-400">
                               {
-                                rawDriverData.filter((d) => d.TIME === time)
-                                  .length
+                                rawDriverData.filter((d) =>
+                                  normalizeTime(d.TIME || "") === time
+                                ).length
                               }
                             </span>
                           </label>
@@ -1233,6 +1239,7 @@ export function CreateRoute({ savedRoutes, onSaveRoute }: CreateRouteProps) {
                       <button
                         onClick={() => {
                           setDriverTimeFilter([]);
+                          setShowDriverTimeDropdown(false);
                         }}
                         className="text-xs text-blue-600 hover:underline"
                       >
@@ -1397,6 +1404,7 @@ export function CreateRoute({ savedRoutes, onSaveRoute }: CreateRouteProps) {
                               onClick={(e) => {
                                 e.stopPropagation();
                                 setTimeFilter([]);
+                                setShowTimeDropdown(false);
                               }}
                               className="text-xs text-blue-600 hover:underline"
                             >
@@ -1424,6 +1432,7 @@ export function CreateRoute({ savedRoutes, onSaveRoute }: CreateRouteProps) {
                                   } else {
                                     setTimeFilter([...timeFilter, time]);
                                   }
+                                  setShowTimeDropdown(false);
                                 }}
                                 className="w-3.5 h-3.5 text-green-600 rounded focus:ring-green-500"
                               />
@@ -1456,6 +1465,7 @@ export function CreateRoute({ savedRoutes, onSaveRoute }: CreateRouteProps) {
                           setPickupCityFilter("All");
                           setDestinationCityFilter("All");
                           setTimeFilter([]);
+                          setShowTimeDropdown(false);
                         }}
                         className="text-xs text-blue-600 hover:underline"
                       >
@@ -1513,13 +1523,18 @@ export function CreateRoute({ savedRoutes, onSaveRoute }: CreateRouteProps) {
                             <span>{passenger.subPoint}</span>
                             {passenger.destinationSubPoint && (
                               <>
-                                <span>→</span>
+                                <span>?</span>
                                 <span className="text-orange-600">
                                   {passenger.destinationSubPoint}
                                 </span>
                               </>
                             )}
                           </div>
+                          {passenger.destination && (
+                            <p className="text-xs text-gray-500">
+                              Drop: {passenger.destination}
+                            </p>
+                          )}
                         </div>
                       </label>
                     ))
@@ -1585,7 +1600,6 @@ export function CreateRoute({ savedRoutes, onSaveRoute }: CreateRouteProps) {
 
             {(selectedDriver || selectedPassengers.length > 0) && (
               <Button
-                variant="ghost"
                 size="sm"
                 onClick={clearSelections}
                 className="h-9"

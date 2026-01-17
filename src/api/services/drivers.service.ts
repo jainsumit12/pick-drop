@@ -1,5 +1,5 @@
 import axiosInstance from "../axios";
-import { Driver, Passenger, ShiftDriver, ShiftPassenger } from "../../types/transport";
+import { Passenger, ShiftDriver, ShiftPassenger } from "../../types/transport";
 
 export const driversService = {
   getDriversByShift: async (
