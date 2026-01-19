@@ -602,6 +602,7 @@ export function CreateRoute({ savedRoutes, onSaveRoute }: CreateRouteProps) {
               passenger.phone
             }</p>
             <p class="text-xs text-gray-500 mb-2">${passenger.address}</p>
+            <p class="text-xs text-gray-500 mb-2"><strong>Drop Location:</strong> ${passenger.destination}</p>
             ${
               passenger.destinationSubPoint
                 ? `<p class="text-xs text-orange-600 font-medium"><strong>Destination:</strong> ${passenger.destinationSubPoint}</p>`
@@ -630,25 +631,55 @@ export function CreateRoute({ savedRoutes, onSaveRoute }: CreateRouteProps) {
 
       markersRef.current.push(marker);
 
-      // Add destination marker (orange) if available - only show if passenger is selected
-      if (passenger.destinationCoordinates && isSelected) {
-        const destEl = document.createElement("div");
-        destEl.style.width = "28px";
-        destEl.style.height = "28px";
-        destEl.style.borderRadius = "50%";
-        destEl.style.backgroundColor = "#f59e0b";
-        destEl.style.border = "3px solid white";
-        destEl.style.boxShadow = "0 4px 8px rgba(0,0,0,0.3)";
-        destEl.style.display = "flex";
-        destEl.style.alignItems = "center";
-        destEl.style.justifyContent = "center";
-        destEl.style.cursor = "pointer";
-        destEl.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="white"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/></svg>`;
+    });
 
-        const destPopup = new mapboxgl.Popup({
-          closeButton: false,
-          closeOnClick: false,
-        }).setHTML(`
+    // Group selected passengers by destination coordinates for drop-off markers
+    const destinationGroups = new Map<string, Location[]>();
+    filteredPassengers.forEach((passenger) => {
+      const isSelected = selectedPassengers.includes(passenger.id);
+      if (passenger.destinationCoordinates && isSelected) {
+        const coordKey = `${passenger.destinationCoordinates[0]},${passenger.destinationCoordinates[1]}`;
+        if (!destinationGroups.has(coordKey)) {
+          destinationGroups.set(coordKey, []);
+        }
+        destinationGroups.get(coordKey)!.push(passenger);
+      }
+    });
+
+    // Create destination markers for each unique location
+    destinationGroups.forEach((passengersAtDest, coordKey) => {
+      const [lng, lat] = coordKey.split(",").map(Number);
+      const coordinates: [number, number] = [lng, lat];
+      const passengerCount = passengersAtDest.length;
+
+      const destEl = document.createElement("div");
+      destEl.style.width = passengerCount > 1 ? "32px" : "28px";
+      destEl.style.height = passengerCount > 1 ? "32px" : "28px";
+      destEl.style.borderRadius = "50%";
+      destEl.style.backgroundColor = "#f59e0b";
+      destEl.style.border = "3px solid white";
+      destEl.style.boxShadow = "0 4px 8px rgba(0,0,0,0.3)";
+      destEl.style.display = "flex";
+      destEl.style.alignItems = "center";
+      destEl.style.justifyContent = "center";
+      destEl.style.cursor = "pointer";
+      destEl.style.position = "relative";
+
+      if (passengerCount > 1) {
+        // Show count badge for multiple passengers
+        destEl.innerHTML = `
+          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="white"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/></svg>
+          <div style="position: absolute; top: -6px; right: -6px; background: #dc2626; color: white; font-size: 10px; font-weight: bold; width: 18px; height: 18px; border-radius: 50%; display: flex; align-items: center; justify-content: center; border: 2px solid white;">${passengerCount}</div>
+        `;
+      } else {
+        destEl.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="white"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/></svg>`;
+      }
+
+      // Create carousel HTML for multiple passengers
+      const createCarouselHTML = () => {
+        if (passengerCount === 1) {
+          const passenger = passengersAtDest[0];
+          return `
             <div class="p-2">
               <div class="flex items-center gap-2 mb-2">
                 <div class="w-8 h-8 rounded-full bg-orange-500 flex items-center justify-center">
@@ -659,32 +690,144 @@ export function CreateRoute({ savedRoutes, onSaveRoute }: CreateRouteProps) {
                   <span class="text-xs text-orange-600 font-medium">DROP-OFF</span>
                 </div>
               </div>
-              <p class="text-xs text-gray-600 mb-1"><strong>Destination:</strong> ${
-                passenger.destinationSubPoint || "N/A"
-              }</p>
-              <p class="text-xs text-gray-500">${
-                passenger.destination || "N/A"
-              }</p>
+              <p class="text-xs text-gray-600 mb-1"><strong>Destination:</strong> ${passenger.destinationSubPoint || "N/A"}</p>
+              <p class="text-xs text-gray-500">${passenger.destination || "N/A"}</p>
             </div>
-          `);
+          `;
+        }
 
-        // Hover handlers to show/hide popup
-        destEl.addEventListener("mouseenter", () => {
-          destPopup
-            .setLngLat(passenger.destinationCoordinates!)
-            .addTo(map.current!);
+        // Multiple passengers - create carousel
+        const carouselId = `carousel-${coordKey.replace(/[.,]/g, "-")}`;
+        const passengersHTML = passengersAtDest.map((passenger, index) => `
+          <div class="carousel-slide" data-index="${index}" style="display: ${index === 0 ? "block" : "none"};">
+            <div class="flex items-center gap-2 mb-2">
+              <div class="w-8 h-8 rounded-full bg-orange-500 flex items-center justify-center flex-shrink-0">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="white"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/></svg>
+              </div>
+              <div class="min-w-0 flex-1">
+                <strong class="block truncate">${passenger.name}</strong>
+                <span class="text-xs text-orange-600 font-medium">DROP-OFF</span>
+              </div>
+            </div>
+            <p class="text-xs text-gray-600 mb-1"><strong>Destination:</strong> ${passenger.destinationSubPoint || "N/A"}</p>
+            <p class="text-xs text-gray-500 truncate">${passenger.destination || "N/A"}</p>
+          </div>
+        `).join("");
+
+        return `
+          <div class="p-2" style="min-width: 220px;">
+            <div class="flex items-center justify-between mb-2 pb-2 border-b border-gray-200">
+              <span class="text-xs font-bold text-orange-600">${passengerCount} Passengers at this location</span>
+            </div>
+            <div id="${carouselId}" class="carousel-container">
+              ${passengersHTML}
+            </div>
+            <div class="flex items-center justify-between mt-3 pt-2 border-t border-gray-200">
+              <button class="carousel-prev px-2 py-1 text-xs bg-gray-100 hover:bg-gray-200 rounded transition-colors" data-carousel="${carouselId}">
+                <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg>
+              </button>
+              <span class="carousel-indicator text-xs text-gray-500" data-carousel="${carouselId}">1 / ${passengerCount}</span>
+              <button class="carousel-next px-2 py-1 text-xs bg-gray-100 hover:bg-gray-200 rounded transition-colors" data-carousel="${carouselId}">
+                <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg>
+              </button>
+            </div>
+          </div>
+        `;
+      };
+
+      const destPopup = new mapboxgl.Popup({
+        closeButton: false,
+        closeOnClick: false,
+        maxWidth: "280px",
+      }).setHTML(createCarouselHTML());
+
+      // Carousel state tracking
+      let currentSlide = 0;
+      let closeTimeout: ReturnType<typeof setTimeout> | null = null;
+      let isPopupOpen = false;
+
+      const setupCarouselEvents = () => {
+        if (passengerCount <= 1) return;
+
+        const carouselId = `carousel-${coordKey.replace(/[.,]/g, "-")}`;
+        const container = document.getElementById(carouselId);
+        if (!container) return;
+
+        const slides = container.querySelectorAll(".carousel-slide");
+        const indicator = document.querySelector(`.carousel-indicator[data-carousel="${carouselId}"]`);
+        const prevBtn = document.querySelector(`.carousel-prev[data-carousel="${carouselId}"]`);
+        const nextBtn = document.querySelector(`.carousel-next[data-carousel="${carouselId}"]`);
+
+        const showSlide = (index: number) => {
+          slides.forEach((slide, i) => {
+            (slide as HTMLElement).style.display = i === index ? "block" : "none";
+          });
+          if (indicator) {
+            indicator.textContent = `${index + 1} / ${passengerCount}`;
+          }
+          currentSlide = index;
+        };
+
+        prevBtn?.addEventListener("click", (e) => {
+          e.stopPropagation();
+          const newIndex = currentSlide === 0 ? passengerCount - 1 : currentSlide - 1;
+          showSlide(newIndex);
         });
 
-        destEl.addEventListener("mouseleave", () => {
+        nextBtn?.addEventListener("click", (e) => {
+          e.stopPropagation();
+          const newIndex = currentSlide === passengerCount - 1 ? 0 : currentSlide + 1;
+          showSlide(newIndex);
+        });
+
+        // Keep popup open when hovering over it
+        const popupEl = destPopup.getElement();
+        if (popupEl) {
+          popupEl.addEventListener("mouseenter", () => {
+            if (closeTimeout) {
+              clearTimeout(closeTimeout);
+              closeTimeout = null;
+            }
+          });
+
+          popupEl.addEventListener("mouseleave", () => {
+            closeTimeout = setTimeout(() => {
+              destPopup.remove();
+              isPopupOpen = false;
+            }, 100);
+          });
+        }
+      };
+
+      // Hover handlers to show/hide popup
+      destEl.addEventListener("mouseenter", () => {
+        if (closeTimeout) {
+          clearTimeout(closeTimeout);
+          closeTimeout = null;
+        }
+        if (!isPopupOpen) {
+          currentSlide = 0; // Reset to first slide
+          // Re-set the HTML to get fresh DOM elements
+          destPopup.setHTML(createCarouselHTML());
+          destPopup.setLngLat(coordinates).addTo(map.current!);
+          isPopupOpen = true;
+          // Setup carousel events after popup is added to DOM
+          setTimeout(setupCarouselEvents, 0);
+        }
+      });
+
+      destEl.addEventListener("mouseleave", () => {
+        closeTimeout = setTimeout(() => {
           destPopup.remove();
-        });
+          isPopupOpen = false;
+        }, 150);
+      });
 
-        const destMarker = new mapboxgl.Marker(destEl)
-          .setLngLat(passenger.destinationCoordinates)
-          .addTo(map.current!);
+      const destMarker = new mapboxgl.Marker(destEl)
+        .setLngLat(coordinates)
+        .addTo(map.current!);
 
-        markersRef.current.push(destMarker);
-      }
+      markersRef.current.push(destMarker);
     });
 
     // Auto-fit map to show all markers

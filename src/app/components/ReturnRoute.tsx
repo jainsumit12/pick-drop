@@ -498,44 +498,44 @@ export function ReturnRoute({ savedRoutes, onSaveRoute }: ReturnRouteProps) {
         togglePassenger(passenger.id);
       });
 
-      const workPopup = new mapboxgl.Popup({ closeButton: false, closeOnClick: false })
+      const workPopup = new mapboxgl.Popup({ closeButton: false, closeOnClick: false, maxWidth: '320px' })
         .setHTML(`
-          <div class="p-3" style="min-width: 320px; max-width: 360px; font-family: Arial, sans-serif; line-height:1.5; color:#1f2937; word-break: break-word;">
-            <div class="flex items-center gap-2 mb-3">
-              <div class="w-8 h-8 rounded-full flex items-center justify-center" style="background-color: ${color}">
+          <div style="padding: 12px; font-family: Arial, sans-serif; line-height: 1.4; color: #1f2937;">
+            <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 12px;">
+              <div style="width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; flex-shrink: 0; background-color: ${color}">
                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="white"><path d="M12 7V3H2v18h20V7H12zM6 19H4v-2h2v2zm0-4H4v-2h2v2zm0-4H4V9h2v2zm0-4H4V5h2v2zm4 12H8v-2h2v2zm0-4H8v-2h2v2zm0-4H8V9h2v2zm0-4H8V5h2v2zm10 12h-8v-2h2v-2h-2v-2h2v-2h-2V9h8v10zm-2-8h-2v2h2v-2zm0 4h-2v2h2v-2z"/></svg>
               </div>
-              <div>
-                <strong class="block text-sm">${passenger.name}</strong>
-                <span class="text-xs font-bold" style="color: ${color}">${isSelected ? 'SELECTED - WORK' : 'WORK LOCATION'}</span>
+              <div style="min-width: 0; flex: 1;">
+                <strong style="display: block; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${passenger.name}</strong>
+                <span style="font-size: 11px; font-weight: bold; color: ${color}">${isSelected ? 'SELECTED - WORK' : 'WORK LOCATION'}</span>
               </div>
             </div>
-            <div class="space-y-3 text-xs text-gray-700">
-              <div style="border:1px solid #e5e7eb; border-radius:8px; padding:8px; display:flex; gap:8px; align-items:flex-start; word-break: break-word;">
-                <span style="color:#ef4444;">📞</span>
-                <div>
-                  <p class="font-semibold text-gray-800">Phone</p>
-                  <p class="text-sm text-gray-800" style="word-break: break-word;">${passenger.phone}</p>
+            <div style="display: flex; flex-direction: column; gap: 8px; font-size: 12px;">
+              <div style="border: 1px solid #e5e7eb; border-radius: 6px; padding: 8px; display: flex; gap: 8px; align-items: flex-start;">
+                <span style="flex-shrink: 0;">📞</span>
+                <div style="min-width: 0; flex: 1;">
+                  <p style="margin: 0; font-weight: 600; color: #374151;">Phone</p>
+                  <p style="margin: 2px 0 0 0; color: #374151;">${passenger.phone}</p>
                 </div>
               </div>
-              <div style="border:1px solid #e5e7eb; border-radius:8px; padding:8px; display:flex; gap:8px; align-items:flex-start; word-break: break-word;">
-                <span style="color:#6b21a8;">🏢</span>
-                <div>
-                  <p class="font-semibold text-gray-800">Pickup Location (Work)</p>
-                  <p class="text-sm text-gray-800" style="word-break: break-word;">${passenger.subPoint || 'N/A'}</p>
-                  <p class="text-gray-500" style="word-break: break-word;">${passenger.address || ''}</p>
+              <div style="border: 1px solid #e5e7eb; border-radius: 6px; padding: 8px; display: flex; gap: 8px; align-items: flex-start;">
+                <span style="flex-shrink: 0;">🏢</span>
+                <div style="min-width: 0; flex: 1; overflow: hidden;">
+                  <p style="margin: 0; font-weight: 600; color: #374151;">Pickup Location (Work)</p>
+                  <p style="margin: 2px 0 0 0; color: #374151; font-weight: 500;">${passenger.subPoint || 'N/A'}</p>
+                  <p style="margin: 2px 0 0 0; color: #6b7280; font-size: 11px; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;">${passenger.address || ''}</p>
                 </div>
               </div>
-              <div style="border:1px solid #e5e7eb; border-radius:8px; padding:8px; display:flex; gap:8px; align-items:flex-start; word-break: break-word;">
-                <span style="color:#15803d;">🏠</span>
-                <div>
-                  <p class="font-semibold text-gray-800">Drop-off Location (Home)</p>
-                  <p class="text-sm text-gray-800" style="word-break: break-word;">${passenger.destinationSubPoint || 'N/A'}</p>
-                  <p class="text-gray-500" style="word-break: break-word;">${passenger.destination || ''}</p>
+              <div style="border: 1px solid #e5e7eb; border-radius: 6px; padding: 8px; display: flex; gap: 8px; align-items: flex-start;">
+                <span style="flex-shrink: 0;">🏠</span>
+                <div style="min-width: 0; flex: 1; overflow: hidden;">
+                  <p style="margin: 0; font-weight: 600; color: #374151;">Drop-off Location (Home)</p>
+                  <p style="margin: 2px 0 0 0; color: #374151; font-weight: 500;">${passenger.destinationSubPoint || 'N/A'}</p>
+                  <p style="margin: 2px 0 0 0; color: #6b7280; font-size: 11px; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;">${passenger.destination || ''}</p>
                 </div>
               </div>
             </div>
-            ${!isSelected ? '<p class="text-xs font-medium cursor-pointer mt-3 text-center" style="color: ' + color + '">Click marker to select</p>' : ''}
+            ${!isSelected ? '<p style="font-size: 11px; font-weight: 500; cursor: pointer; margin-top: 10px; text-align: center; color: ' + color + '">Click marker to select</p>' : ''}
           </div>
         `);
 
@@ -576,48 +576,44 @@ export function ReturnRoute({ savedRoutes, onSaveRoute }: ReturnRouteProps) {
           togglePassenger(passenger.id);
         });
 
-        const homePopup = new mapboxgl.Popup({ closeButton: false, closeOnClick: false })
+        const homePopup = new mapboxgl.Popup({ closeButton: false, closeOnClick: false, maxWidth: '320px' })
           .setHTML(`
-            <div class="p-3" style="min-width: 320px; max-width: 360px; font-family: Arial, sans-serif; line-height:1.5; color:#1f2937; word-break: break-word;">
-              <div class="flex items-center gap-2 mb-3">
-                <div class="w-8 h-8 rounded-full flex items-center justify-center" style="background-color: ${color}">
+            <div style="padding: 12px; font-family: Arial, sans-serif; line-height: 1.4; color: #1f2937;">
+              <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 12px;">
+                <div style="width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; flex-shrink: 0; background-color: ${color}">
                   <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="white"><path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z"/></svg>
                 </div>
-                <div>
-                  <strong class="block text-sm">${passenger.name}</strong>
-                  <span class="text-xs font-bold" style="color: ${color}">${isSelected ? 'SELECTED - HOME' : 'HOME DESTINATION'}</span>
+                <div style="min-width: 0; flex: 1;">
+                  <strong style="display: block; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${passenger.name}</strong>
+                  <span style="font-size: 11px; font-weight: bold; color: ${color}">${isSelected ? 'SELECTED - HOME' : 'HOME DESTINATION'}</span>
                 </div>
               </div>
-              
-              <div class="space-y-3 text-xs text-gray-700">
-                <div style="border:1px solid #e5e7eb; border-radius:8px; padding:8px; display:flex; gap:8px; align-items:flex-start; word-break: break-word;">
-                  <span style="color:#ef4444;">📞</span>
-                  <div>
-                    <p class="font-semibold text-gray-800">Phone</p>
-                    <p class="text-sm text-gray-800" style="word-break: break-word;">${passenger.phone}</p>
+              <div style="display: flex; flex-direction: column; gap: 8px; font-size: 12px;">
+                <div style="border: 1px solid #e5e7eb; border-radius: 6px; padding: 8px; display: flex; gap: 8px; align-items: flex-start;">
+                  <span style="flex-shrink: 0;">📞</span>
+                  <div style="min-width: 0; flex: 1;">
+                    <p style="margin: 0; font-weight: 600; color: #374151;">Phone</p>
+                    <p style="margin: 2px 0 0 0; color: #374151;">${passenger.phone}</p>
                   </div>
                 </div>
-                
-                <div style="border:1px solid #e5e7eb; border-radius:8px; padding:8px; display:flex; gap:8px; align-items:flex-start; word-break: break-word;">
-                  <span style="color:#6b21a8;">🏢</span>
-                  <div>
-                    <p class="font-semibold text-gray-800">Pickup Location (Work)</p>
-                    <p class="text-sm text-gray-800" style="word-break: break-word;">${passenger.subPoint || 'N/A'}</p>
-                    <p class="text-gray-500" style="word-break: break-word;">${passenger.address || ''}</p>
+                <div style="border: 1px solid #e5e7eb; border-radius: 6px; padding: 8px; display: flex; gap: 8px; align-items: flex-start;">
+                  <span style="flex-shrink: 0;">🏢</span>
+                  <div style="min-width: 0; flex: 1; overflow: hidden;">
+                    <p style="margin: 0; font-weight: 600; color: #374151;">Pickup Location (Work)</p>
+                    <p style="margin: 2px 0 0 0; color: #374151; font-weight: 500;">${passenger.subPoint || 'N/A'}</p>
+                    <p style="margin: 2px 0 0 0; color: #6b7280; font-size: 11px; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;">${passenger.address || ''}</p>
                   </div>
                 </div>
-                
-                <div style="border:1px solid #e5e7eb; border-radius:8px; padding:8px; display:flex; gap:8px; align-items:flex-start; word-break: break-word;">
-                  <span style="color:#15803d;">🏠</span>
-                  <div>
-                    <p class="font-semibold text-gray-800">Drop-off Location (Home)</p>
-                    <p class="text-sm text-gray-800" style="word-break: break-word;">${passenger.destinationSubPoint || 'N/A'}</p>
-                    <p class="text-gray-500" style="word-break: break-word;">${passenger.destination || ''}</p>
+                <div style="border: 1px solid #e5e7eb; border-radius: 6px; padding: 8px; display: flex; gap: 8px; align-items: flex-start;">
+                  <span style="flex-shrink: 0;">🏠</span>
+                  <div style="min-width: 0; flex: 1; overflow: hidden;">
+                    <p style="margin: 0; font-weight: 600; color: #374151;">Drop-off Location (Home)</p>
+                    <p style="margin: 2px 0 0 0; color: #374151; font-weight: 500;">${passenger.destinationSubPoint || 'N/A'}</p>
+                    <p style="margin: 2px 0 0 0; color: #6b7280; font-size: 11px; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;">${passenger.destination || ''}</p>
                   </div>
                 </div>
               </div>
-              
-              ${!isSelected ? '<p class="text-xs font-medium cursor-pointer mt-3 text-center" style="color: ' + color + '">Click marker to select</p>' : ''}
+              ${!isSelected ? '<p style="font-size: 11px; font-weight: 500; cursor: pointer; margin-top: 10px; text-align: center; color: ' + color + '">Click marker to select</p>' : ''}
             </div>
           `);
 
