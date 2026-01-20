@@ -28,4 +28,6 @@ export interface SavedRoute {
   routeType: 'going' | 'return' | 'pickup';
   driverSnapshot?: RouteParticipant;
   passengerSnapshots?: RouteParticipant[];
+  date: string;
+  shift: string;
 }

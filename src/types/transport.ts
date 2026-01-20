@@ -26,6 +26,7 @@ export interface ShiftDriver {
 }
 
 export interface PassengerBase {
+  USER_ID: string;
   SHIFT: string;
   DATE: string;
   TIME: string;

@@ -1,17 +1,36 @@
-﻿import { useEffect, useRef, useState } from 'react';
-import mapboxgl from 'mapbox-gl';
-import { Button } from './ui/button';
-import { Badge } from './ui/badge';
-import { Car, Users, Clock, Save, X, ChevronDown, Search, MapPin, Phone, Navigation, ZoomIn, ZoomOut, Maximize2, Home, Building2, Calendar } from 'lucide-react';
-import { driversService, passengersService } from '../../api/services';
-import { RouteParticipant, SavedRoute, RouteInfo } from '../../types/route';
-import { ShiftDriver, ShiftPassenger } from '../../types/transport';
+﻿import { useEffect, useRef, useState } from "react";
+import mapboxgl from "mapbox-gl";
+import { Button } from "./ui/button";
+import { Badge } from "./ui/badge";
+import {
+  Car,
+  Users,
+  Clock,
+  Save,
+  X,
+  ChevronDown,
+  Search,
+  MapPin,
+  Phone,
+  Navigation,
+  ZoomIn,
+  ZoomOut,
+  Maximize2,
+  Home,
+  Building2,
+  Calendar,
+} from "lucide-react";
+import { driversService, passengersService } from "../../api/services";
+import { RouteParticipant, SavedRoute, RouteInfo } from "../../types/route";
+import { ShiftDriver, ShiftPassenger } from "../../types/transport";
+import { useAppDispatch, useAppSelector } from "../../store/hooks";
+import { setReturnDate, setReturnShift } from "../../store/slices/filterSlice";
 
 interface Location {
   id: string;
   name: string;
   coordinates: [number, number];
-  type: 'driver' | 'passenger';
+  type: "driver" | "passenger";
   phone: string;
   address: string;
   subPoint: string;
@@ -39,35 +58,37 @@ const extractId = (fullName: string, location?: string): string => {
   const match = fullName.match(/- (\d+)/);
   if (match) return match[1];
   // Generate consistent ID from name and location
-  const nameStr = fullName.replace(/\s+/g, '-').toLowerCase();
-  const locStr = location ? location.slice(0, 20).replace(/\s+/g, '-').toLowerCase() : '';
+  const nameStr = fullName.replace(/\s+/g, "-").toLowerCase();
+  const locStr = location
+    ? location.slice(0, 20).replace(/\s+/g, "-").toLowerCase()
+    : "";
   return `${nameStr}-${locStr}`.slice(0, 50);
 };
 
 const parseCoordinate = (value: number | string | null): number | null => {
-  if (value === null || value === undefined || value === '') return null;
-  const parsed = typeof value === 'string' ? Number(value) : value;
+  if (value === null || value === undefined || value === "") return null;
+  const parsed = typeof value === "string" ? Number(value) : value;
   return Number.isFinite(parsed) ? parsed : null;
 };
 
 const normalizeTime = (time: string): string => {
-  const trimmed = (time || '').trim();
-  if (trimmed.length === 0) return '';
+  const trimmed = (time || "").trim();
+  if (trimmed.length === 0) return "";
 
   // If format isn't numeric time (e.g., "ALL"), return as-is
   if (!/^\d{1,2}(:\d{1,2})?$/.test(trimmed)) {
     return trimmed;
   }
 
-  const [h, m = ''] = trimmed.split(':');
+  const [h, m = ""] = trimmed.split(":");
   const hourNum = Number(h);
   const hour = Number.isNaN(hourNum) ? h : String(hourNum); // strip leading zero safely
-  const minute = (m || '').padEnd(2, '0').slice(0, 2);
+  const minute = (m || "").padEnd(2, "0").slice(0, 2);
   return `${hour}:${minute}`;
 };
 
 const formatDateForApi = (date: string): string => {
-  const [year, month, day] = date.split('-');
+  const [year, month, day] = date.split("-");
   if (!year || !month || !day) return date;
   return `${day}-${month}-${year}`;
 };
@@ -93,7 +114,10 @@ const generateUniqueColor = (index: number, total: number): string => {
 };
 
 // Convert rider data to Location format
-const convertRidersToLocations = (riders: ShiftDriver[], shift: string): Location[] => {
+const convertRidersToLocations = (
+  riders: ShiftDriver[],
+  shift: string
+): Location[] => {
   return riders.flatMap((rider) => {
     const lat = parseCoordinate(rider.HOME_LAT);
     const log = parseCoordinate(rider.HOME_LOG);
@@ -101,15 +125,15 @@ const convertRidersToLocations = (riders: ShiftDriver[], shift: string): Locatio
 
     return [
       {
-        id: `${shift}-${extractId(rider.DRIVER_NAME, rider.HOME_LOCATION)}`,
+        id: rider.DRIVER_ID,
         name: extractCleanName(rider.DRIVER_NAME),
         coordinates: [log, lat],
-        type: 'driver' as const,
+        type: "driver" as const,
         phone: rider.DRIVER_PHONE,
         address: rider.HOME_LOCATION,
         subPoint: rider.DRIVER_SUBPOINT,
         shiftTime: rider.SHIFT,
-        time: normalizeTime(rider.TIME || '')
+        time: normalizeTime(rider.TIME || ""),
       },
     ];
   });
@@ -117,7 +141,10 @@ const convertRidersToLocations = (riders: ShiftDriver[], shift: string): Locatio
 
 // Convert passenger data to Location format for RETURN route
 // For Return Route: PICKUP_LOCATION = Factory (current), DROP_LOCATION = Home (destination)
-const convertPassengersToLocations = (passengers: ShiftPassenger[], shift: string): Location[] => {
+const convertPassengersToLocations = (
+  passengers: ShiftPassenger[],
+  shift: string
+): Location[] => {
   const filteredPassengers = passengers.flatMap((passenger) => {
     const pickupLat = parseCoordinate(passenger.PICKUP_LAT);
     const pickupLog = parseCoordinate(passenger.PICKUP_LOG);
@@ -146,31 +173,42 @@ const convertPassengersToLocations = (passengers: ShiftPassenger[], shift: strin
   });
 
   return filteredPassengers.map((passenger, index) => ({
-    id: `passenger-${shift}-${passenger.NAME.replace(/\s+/g, '-')}-${index}`,
+    id: passenger.USER_ID,
     name: passenger.NAME,
-    coordinates: [passenger.PICKUP_LOG as number, passenger.PICKUP_LAT as number], // Currently at factory
-    type: 'passenger' as const,
+    coordinates: [
+      passenger.PICKUP_LOG as number,
+      passenger.PICKUP_LAT as number,
+    ], // Currently at factory
+    type: "passenger" as const,
     phone: passenger.MOBILE.toString(),
     address: passenger.PICKUP_LOCATION,
     subPoint: passenger.PICKUP_SUBPOINT,
     shiftTime: passenger.SHIFT,
     time: passenger.TIME,
-    destinationCoordinates: [passenger.DROP_LOG as number, passenger.DROP_LAT as number], // Going home
+    destinationCoordinates: [
+      passenger.DROP_LOG as number,
+      passenger.DROP_LAT as number,
+    ], // Going home
     destination: passenger.DROP_LOCATION,
     destinationSubPoint: passenger.DROP_SUBPOINT,
-    color: generateUniqueColor(index, filteredPassengers.length)
+    color: generateUniqueColor(index, filteredPassengers.length),
   }));
 };
 
 export function ReturnRoute({ savedRoutes, onSaveRoute }: ReturnRouteProps) {
+  const dispatch = useAppDispatch();
+  const { selectedDate, selectedShift } = useAppSelector(
+    (state) => state.filters.return
+  );
+
+  const returnRoutes = savedRoutes.filter(
+    (route) => route.routeType === "return"
+  );
+
   const mapContainer = useRef<HTMLDivElement>(null);
   const map = useRef<mapboxgl.Map | null>(null);
   const markersRef = useRef<mapboxgl.Marker[]>([]);
-  
-  const [selectedShift, setSelectedShift] = useState<string>('Morning');
-  const [selectedDate, setSelectedDate] = useState<string>(
-    new Date().toISOString().split('T')[0]
-  );
+
   const [selectedDriver, setSelectedDriver] = useState<string | null>(null);
   const [selectedPassengers, setSelectedPassengers] = useState<string[]>([]);
   const [routeInfo, setRouteInfo] = useState<RouteInfo | null>(null);
@@ -182,35 +220,36 @@ export function ReturnRoute({ savedRoutes, onSaveRoute }: ReturnRouteProps) {
   const [passengersData, setPassengersData] = useState<ShiftPassenger[]>([]);
   const [passengersLoading, setPassengersLoading] = useState(false);
   const [passengersError, setPassengersError] = useState<string | null>(null);
-  
+
   // Dropdown states
   const [showDriverDropdown, setShowDriverDropdown] = useState(false);
   const [showPassengerDropdown, setShowPassengerDropdown] = useState(false);
   const [showShiftDropdown, setShowShiftDropdown] = useState(false);
   const [showDateDropdown, setShowDateDropdown] = useState(false);
-  const [driverSearch, setDriverSearch] = useState('');
-  const [passengerSearch, setPassengerSearch] = useState('');
-  
+  const [driverSearch, setDriverSearch] = useState("");
+  const [passengerSearch, setPassengerSearch] = useState("");
+
   // Filter states
-  const [pickupCityFilter, setPickupCityFilter] = useState<string>('All');
-  const [destinationCityFilter, setDestinationCityFilter] = useState<string>('All');
+  const [pickupCityFilter, setPickupCityFilter] = useState<string>("All");
+  const [destinationCityFilter, setDestinationCityFilter] =
+    useState<string>("All");
   const [timeFilter, setTimeFilter] = useState<string[]>([]); // Passenger time filter
   const [driverTimeFilter, setDriverTimeFilter] = useState<string[]>([]); // Driver time filter
 
   const [showTimeDropdown, setShowTimeDropdown] = useState(false);
   const [showDriverTimeDropdown, setShowDriverTimeDropdown] = useState(false);
-  
+
   // Bottom panel state
   const [showBottomPanel, setShowBottomPanel] = useState(false);
 
-  const shifts = ['Morning', 'Afternoon', 'Evening', 'Night'];
+  const shifts = ["Morning", "Afternoon", "Evening", "Night"];
 
   const routeColors = [
-    { primary: '#3b82f6', name: 'Blue' },
-    { primary: '#8b5cf6', name: 'Purple' },
-    { primary: '#ec4899', name: 'Pink' },
-    { primary: '#f59e0b', name: 'Orange' },
-    { primary: '#10b981', name: 'Green' },
+    { primary: "#3b82f6", name: "Blue" },
+    { primary: "#8b5cf6", name: "Purple" },
+    { primary: "#ec4899", name: "Pink" },
+    { primary: "#f59e0b", name: "Orange" },
+    { primary: "#10b981", name: "Green" },
   ];
 
   useEffect(() => {
@@ -223,7 +262,7 @@ export function ReturnRoute({ savedRoutes, onSaveRoute }: ReturnRouteProps) {
         const shift = selectedShift.toLowerCase();
         const data = await driversService.getDriversByShift(
           formattedDate,
-          'return',
+          "return",
           shift
         );
         if (!cancelled) {
@@ -231,7 +270,7 @@ export function ReturnRoute({ savedRoutes, onSaveRoute }: ReturnRouteProps) {
         }
       } catch (error: any) {
         if (!cancelled) {
-          setDriversError(error?.message || 'Failed to load drivers');
+          setDriversError(error?.message || "Failed to load drivers");
           setDriversData([]);
         }
       } finally {
@@ -256,7 +295,7 @@ export function ReturnRoute({ savedRoutes, onSaveRoute }: ReturnRouteProps) {
         const shift = selectedShift.toLowerCase();
         const data = await passengersService.getPassengersByShiftDateRoute(
           selectedDate,
-          'return',
+          "return",
           shift
         );
         if (!cancelled) {
@@ -266,7 +305,7 @@ export function ReturnRoute({ savedRoutes, onSaveRoute }: ReturnRouteProps) {
         }
       } catch (error: any) {
         if (!cancelled) {
-          setPassengersError(error?.message || 'Failed to load passengers');
+          setPassengersError(error?.message || "Failed to load passengers");
           setPassengersData([]);
         }
       } finally {
@@ -284,78 +323,120 @@ export function ReturnRoute({ savedRoutes, onSaveRoute }: ReturnRouteProps) {
 
   // Get drivers for selected shift
   const drivers = convertRidersToLocations(driversData, selectedShift);
-  
+
   // Get passengers for selected shift
-  const passengers = convertPassengersToLocations(passengersData, selectedShift);
-  
+  const passengers = convertPassengersToLocations(
+    passengersData,
+    selectedShift
+  );
+
   // Filter out drivers and passengers that are already used in saved RETURN routes only
-  const usedDriverIds = new Set(savedRoutes.filter(route => route.routeType === 'return').map(route => route.driverId));
-  const usedPassengerIds = new Set(savedRoutes.filter(route => route.routeType === 'return').flatMap(route => route.passengerIds));
-  
-  const availableDrivers = drivers.filter(driver => !usedDriverIds.has(driver.id));
-  const availablePassengers = passengers.filter(passenger => !usedPassengerIds.has(passenger.id));
-  
+  // const usedDriverIds = new Set(
+  //   savedRoutes
+  //     .filter((route) => route.routeType === "return")
+  //     .map((route) => route.driverId)
+  // );
+  const usedPassengerIds = new Set(
+    savedRoutes
+      .filter((route) => route.routeType === "return")
+      .flatMap((route) => route.passengerIds)
+  );
+
+  const availableDrivers = drivers;
+  const availablePassengers = passengers.filter(
+    (passenger) => !usedPassengerIds.has(passenger.id)
+  );
+
   // Extract unique filter options from passenger data (for Return: factory locations are "pickup", home locations are "destination")
-  const rawPassengerData = passengersData.filter(p => p.SHIFT === selectedShift);
-  const pickupCities = ['All', ...Array.from(new Set(rawPassengerData.map(p => p.PICKUP_SUBPOINT)))]; // Factory locations
-  const destinationCities = ['All', ...Array.from(new Set(rawPassengerData.map(p => p.DROP_SUBPOINT)))]; // Home locations
-  const times = ['All', ...Array.from(new Set(rawPassengerData.map(p => p.TIME))).sort()];
-  
+  const rawPassengerData = passengersData.filter(
+    (p) => p.SHIFT === selectedShift
+  );
+  const pickupCities = [
+    "All",
+    ...Array.from(new Set(rawPassengerData.map((p) => p.PICKUP_SUBPOINT))),
+  ]; // Factory locations
+  const destinationCities = [
+    "All",
+    ...Array.from(new Set(rawPassengerData.map((p) => p.DROP_SUBPOINT))),
+  ]; // Home locations
+  const times = [
+    "All",
+    ...Array.from(new Set(rawPassengerData.map((p) => p.TIME))).sort(),
+  ];
+
   // Extract unique driver times
-  const rawDriverData = driversData.filter(r => r.SHIFT === selectedShift);
+  const rawDriverData = driversData.filter((r) => r.SHIFT === selectedShift);
   const driverTimes = Array.from(
     new Set(
-      rawDriverData
-        .map(r => normalizeTime(r.TIME || ''))
-        .filter(Boolean)
+      rawDriverData.map((r) => normalizeTime(r.TIME || "")).filter(Boolean)
     )
   ).sort();
-  
+
   // Filter drivers and passengers based on search
-  const filteredDrivers = availableDrivers.filter(d => {
-    const matchesSearch = d.name.toLowerCase().includes(driverSearch.toLowerCase()) ||
+  const filteredDrivers = availableDrivers.filter((d) => {
+    const matchesSearch =
+      d.name.toLowerCase().includes(driverSearch.toLowerCase()) ||
       d.subPoint.toLowerCase().includes(driverSearch.toLowerCase());
-    
+
     // Find original driver data to check time
-    const originalDriver = rawDriverData.find(rd => 
-      extractCleanName(rd.DRIVER_NAME).toLowerCase() === d.name.toLowerCase() &&
-      (rd.DRIVER_SUBPOINT || rd.HOME_LOCATION || '').toLowerCase() === d.subPoint.toLowerCase()
+    const originalDriver = rawDriverData.find(
+      (rd) =>
+        extractCleanName(rd.DRIVER_NAME).toLowerCase() ===
+          d.name.toLowerCase() &&
+        (rd.DRIVER_SUBPOINT || rd.HOME_LOCATION || "").toLowerCase() ===
+          d.subPoint.toLowerCase()
     );
-    const originalTime = normalizeTime(originalDriver?.TIME || '');
-    
+    const originalTime = normalizeTime(originalDriver?.TIME || "");
+
     // If no time filter selected, show all drivers
     if (driverTimeFilter.length === 0) {
       return matchesSearch;
     }
-    
+
     // If time filter selected, require matching time (normalized)
-    const normalizedFilter = driverTimeFilter.map(t => normalizeTime(t));
-    const matchesTime = originalTime !== '' && normalizedFilter.includes(originalTime);
-    
+    const normalizedFilter = driverTimeFilter.map((t) => normalizeTime(t));
+    const matchesTime =
+      originalTime !== "" && normalizedFilter.includes(originalTime);
+
     return matchesSearch && matchesTime;
   });
-  
+
   // Apply all filters to passengers
-  const filteredPassengers = availablePassengers.filter(p => {
-    const matchesSearch = p.name.toLowerCase().includes(passengerSearch.toLowerCase()) ||
+  const filteredPassengers = availablePassengers.filter((p) => {
+    const matchesSearch =
+      p.name.toLowerCase().includes(passengerSearch.toLowerCase()) ||
       p.subPoint.toLowerCase().includes(passengerSearch.toLowerCase());
-    
-    const matchesPickupCity = pickupCityFilter === 'All' || p.subPoint === pickupCityFilter; // Factory location (PICKUP in raw data)
-    const matchesDestinationCity = destinationCityFilter === 'All' || p.destinationSubPoint === destinationCityFilter; // Home location (DROP in raw data)
-    
+
+    const matchesPickupCity =
+      pickupCityFilter === "All" || p.subPoint === pickupCityFilter; // Factory location (PICKUP in raw data)
+    const matchesDestinationCity =
+      destinationCityFilter === "All" ||
+      p.destinationSubPoint === destinationCityFilter; // Home location (DROP in raw data)
+
     // Find original passenger data to check time
-    const originalPassenger = rawPassengerData.find(pd => 
-      extractCleanName(pd.NAME) === p.name && pd.PICKUP_SUBPOINT === p.subPoint
+    const originalPassenger = rawPassengerData.find(
+      (pd) =>
+        extractCleanName(pd.NAME) === p.name &&
+        pd.PICKUP_SUBPOINT === p.subPoint
     );
-    
-    const matchesTime = timeFilter.length === 0 || timeFilter.includes(originalPassenger?.TIME || '');
-    
-    return matchesSearch && matchesPickupCity && matchesDestinationCity && matchesTime;
+
+    const matchesTime =
+      timeFilter.length === 0 ||
+      timeFilter.includes(originalPassenger?.TIME || "");
+
+    return (
+      matchesSearch &&
+      matchesPickupCity &&
+      matchesDestinationCity &&
+      matchesTime
+    );
   });
 
   // Get selected driver and passengers
-  const currentDriver = availableDrivers.find(d => d.id === selectedDriver);
-  const currentPassengers = availablePassengers.filter(p => selectedPassengers.includes(p.id));
+  const currentDriver = availableDrivers.find((d) => d.id === selectedDriver);
+  const currentPassengers = availablePassengers.filter((p) =>
+    selectedPassengers.includes(p.id)
+  );
 
   useEffect(() => {
     if (!mapContainer.current || map.current) return;
@@ -363,14 +444,14 @@ export function ReturnRoute({ savedRoutes, onSaveRoute }: ReturnRouteProps) {
     try {
       map.current = new mapboxgl.Map({
         container: mapContainer.current,
-        style: 'mapbox://styles/mapbox/streets-v12',
+        style: "mapbox://styles/mapbox/streets-v12",
         center: [-80.4925, 43.4516],
         zoom: 10,
       });
 
       // Remove the default navigation control - we'll add custom controls in the menu bar
     } catch (error) {
-      console.error('Error initializing map:', error);
+      console.error("Error initializing map:", error);
     }
 
     return () => {
@@ -383,7 +464,7 @@ export function ReturnRoute({ savedRoutes, onSaveRoute }: ReturnRouteProps) {
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       const target = event.target as HTMLElement;
-      if (!target.closest('.dropdown-container')) {
+      if (!target.closest(".dropdown-container")) {
         setShowDriverDropdown(false);
         setShowPassengerDropdown(false);
         setShowShiftDropdown(false);
@@ -391,54 +472,74 @@ export function ReturnRoute({ savedRoutes, onSaveRoute }: ReturnRouteProps) {
       }
     };
 
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
   useEffect(() => {
     if (!map.current) return;
 
     if (!map.current.isStyleLoaded()) {
-      map.current.once('load', () => {
+      map.current.once("load", () => {
         updateMarkersAndRoute();
       });
       return;
     }
 
     updateMarkersAndRoute();
-  }, [selectedDriver, selectedPassengers, selectedShift, driversData, passengersData, pickupCityFilter, destinationCityFilter, timeFilter, driverTimeFilter, passengerSearch, driverSearch]);
+  }, [
+    selectedDriver,
+    selectedPassengers,
+    selectedShift,
+    driversData,
+    passengersData,
+    pickupCityFilter,
+    destinationCityFilter,
+    timeFilter,
+    driverTimeFilter,
+    passengerSearch,
+    driverSearch,
+  ]);
 
   const updateMarkersAndRoute = () => {
     if (!map.current) return;
 
-    markersRef.current.forEach(marker => marker.remove());
+    markersRef.current.forEach((marker) => marker.remove());
     markersRef.current = [];
 
     // Add driver markers based on filter
-    filteredDrivers.forEach(driver => {
+    filteredDrivers.forEach((driver) => {
       const isSelected = driver.id === selectedDriver;
-      const el = document.createElement('div');
-      el.style.width = isSelected ? '40px' : '32px';
-      el.style.height = isSelected ? '40px' : '32px';
-      el.style.borderRadius = '50%';
-      el.style.backgroundColor = isSelected ? '#3b82f6' : '#93c5fd';
-      el.style.border = isSelected ? '3px solid white' : '2px solid white';
-      el.style.boxShadow = isSelected ? '0 4px 8px rgba(0,0,0,0.3)' : '0 2px 4px rgba(0,0,0,0.2)';
-      el.style.display = 'flex';
-      el.style.alignItems = 'center';
-      el.style.justifyContent = 'center';
-      el.style.cursor = 'pointer';
-      el.style.transition = 'all 0.2s';
-      el.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="${isSelected ? '20' : '16'}" height="${isSelected ? '20' : '16'}" viewBox="0 0 24 24" fill="white"><path d="M18.92 6.01C18.72 5.42 18.16 5 17.5 5h-11c-.66 0-1.21.42-1.42 1.01L3 12v8c0 .55.45 1 1 1h1c.55 0 1-.45 1-1v-1h12v1c0 .55.45 1 1 1h1c.55 0 1-.45 1-1v-8l-2.08-5.99zM6.5 16c-.83 0-1.5-.67-1.5-1.5S5.67 13 6.5 13s1.5.67 1.5 1.5S7.33 16 6.5 16zm11 0c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zM5 11l1.5-4.5h11L19 11H5z"/></svg>`;
+      const el = document.createElement("div");
+      el.style.width = isSelected ? "40px" : "32px";
+      el.style.height = isSelected ? "40px" : "32px";
+      el.style.borderRadius = "50%";
+      el.style.backgroundColor = isSelected ? "#3b82f6" : "#93c5fd";
+      el.style.border = isSelected ? "3px solid white" : "2px solid white";
+      el.style.boxShadow = isSelected
+        ? "0 4px 8px rgba(0,0,0,0.3)"
+        : "0 2px 4px rgba(0,0,0,0.2)";
+      el.style.display = "flex";
+      el.style.alignItems = "center";
+      el.style.justifyContent = "center";
+      el.style.cursor = "pointer";
+      el.style.transition = "all 0.2s";
+      el.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="${
+        isSelected ? "20" : "16"
+      }" height="${
+        isSelected ? "20" : "16"
+      }" viewBox="0 0 24 24" fill="white"><path d="M18.92 6.01C18.72 5.42 18.16 5 17.5 5h-11c-.66 0-1.21.42-1.42 1.01L3 12v8c0 .55.45 1 1 1h1c.55 0 1-.45 1-1v-1h12v1c0 .55.45 1 1 1h1c.55 0 1-.45 1-1v-8l-2.08-5.99zM6.5 16c-.83 0-1.5-.67-1.5-1.5S5.67 13 6.5 13s1.5.67 1.5 1.5S7.33 16 6.5 16zm11 0c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zM5 11l1.5-4.5h11L19 11H5z"/></svg>`;
 
       // Click handler to select driver
-      el.addEventListener('click', () => {
+      el.addEventListener("click", () => {
         popup.remove(); // keep popup hover-only
         setSelectedDriver(driver.id);
       });
 
-      const popup = new mapboxgl.Popup({ closeButton: false, closeOnClick: false })
-        .setHTML(`
+      const popup = new mapboxgl.Popup({
+        closeButton: false,
+        closeOnClick: false,
+      }).setHTML(`
           <div class="p-2">
             <div class="flex items-center gap-2 mb-2">
               <div class="w-8 h-8 rounded-full bg-blue-500 flex items-center justify-center">
@@ -446,22 +547,38 @@ export function ReturnRoute({ savedRoutes, onSaveRoute }: ReturnRouteProps) {
               </div>
               <div>
                 <strong class="block">${driver.name}</strong>
-                <span class="text-xs ${isSelected ? 'text-blue-600 font-bold' : 'text-blue-600'}">${isSelected ? 'SELECTED DRIVER' : 'DRIVER'}</span>
+                <span class="text-xs ${
+                  isSelected ? "text-blue-600 font-bold" : "text-blue-600"
+                }">${isSelected ? "SELECTED DRIVER" : "DRIVER"}</span>
               </div>
             </div>
-            <p class="text-xs text-gray-600 mb-1"><strong>Location:</strong> ${driver.subPoint}</p>
-            <p class="text-xs text-gray-600 mb-1"><strong>Phone:</strong> ${driver.phone}</p>
+            <p class="text-xs text-gray-600 mb-1"><strong>Driver id:</strong> ${
+              driver.id
+            }</p>
+            <p class="text-xs text-gray-600 mb-1"><strong>Time:</strong> ${
+              driver.time
+            }</p>
+            <p class="text-xs text-gray-600 mb-1"><strong>Location:</strong> ${
+              driver.subPoint
+            }</p>
+            <p class="text-xs text-gray-600 mb-1"><strong>Phone:</strong> ${
+              driver.phone
+            }</p>
             <p class="text-xs text-gray-500 mb-2">${driver.address}</p>
-            ${!isSelected ? '<p class="text-xs text-blue-600 font-medium cursor-pointer">Click marker to select</p>' : ''}
+            ${
+              !isSelected
+                ? '<p class="text-xs text-blue-600 font-medium cursor-pointer">Click marker to select</p>'
+                : ""
+            }
           </div>
         `);
 
       // Hover handlers to show/hide popup
-      el.addEventListener('mouseenter', () => {
+      el.addEventListener("mouseenter", () => {
         popup.setLngLat(driver.coordinates).addTo(map.current!);
       });
 
-      el.addEventListener('mouseleave', () => {
+      el.addEventListener("mouseleave", () => {
         popup.remove();
       });
 
@@ -473,41 +590,55 @@ export function ReturnRoute({ savedRoutes, onSaveRoute }: ReturnRouteProps) {
     });
 
     // Add filtered passenger markers with unique colors (work and home locations)
-    filteredPassengers.forEach(passenger => {
+    filteredPassengers.forEach((passenger) => {
       const isSelected = selectedPassengers.includes(passenger.id);
-      const color = passenger.color || '#10b981';
-      
+      const color = passenger.color || "#10b981";
+      console.log(passenger, "passenger");
+
       // Add work location marker (Building icon)
-      const workEl = document.createElement('div');
-      workEl.style.width = isSelected ? '34px' : '26px';
-      workEl.style.height = isSelected ? '34px' : '26px';
-      workEl.style.borderRadius = '50%';
-      workEl.style.backgroundColor = color;
-      workEl.style.border = isSelected ? '3px solid white' : '2px solid white';
-      workEl.style.boxShadow = isSelected ? '0 4px 8px rgba(0,0,0,0.3)' : '0 2px 4px rgba(0,0,0,0.2)';
-      workEl.style.display = 'flex';
-      workEl.style.alignItems = 'center';
-      workEl.style.justifyContent = 'center';
-      workEl.style.cursor = 'pointer';
-      workEl.style.transition = 'all 0.2s';
-      workEl.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="${isSelected ? '18' : '14'}" height="${isSelected ? '18' : '14'}" viewBox="0 0 24 24" fill="white"><path d="M12 7V3H2v18h20V7H12zM6 19H4v-2h2v2zm0-4H4v-2h2v2zm0-4H4V9h2v2zm0-4H4V5h2v2zm4 12H8v-2h2v2zm0-4H8v-2h2v2zm0-4H8V9h2v2zm0-4H8V5h2v2zm10 12h-8v-2h2v-2h-2v-2h2v-2h-2V9h8v10zm-2-8h-2v2h2v-2zm0 4h-2v2h2v-2z"/></svg>`;
+      const workEl = document.createElement("div");
+      workEl.style.width = isSelected ? "34px" : "26px";
+      workEl.style.height = isSelected ? "34px" : "26px";
+      workEl.style.borderRadius = "50%";
+      workEl.style.backgroundColor = isSelected ? "#10b981" : "#86efac";
+      workEl.style.border = isSelected ? "3px solid white" : "2px solid white";
+      workEl.style.boxShadow = isSelected
+        ? "0 4px 8px rgba(0,0,0,0.3)"
+        : "0 2px 4px rgba(0,0,0,0.2)";
+      workEl.style.display = "flex";
+      workEl.style.alignItems = "center";
+      workEl.style.justifyContent = "center";
+      workEl.style.cursor = "pointer";
+      workEl.style.transition = "all 0.2s";
+      workEl.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="${
+        isSelected ? "18" : "14"
+      }" height="${
+        isSelected ? "18" : "14"
+      }" viewBox="0 0 24 24" fill="white"><path d="M12 7V3H2v18h20V7H12zM6 19H4v-2h2v2zm0-4H4v-2h2v2zm0-4H4V9h2v2zm0-4H4V5h2v2zm4 12H8v-2h2v2zm0-4H8v-2h2v2zm0-4H8V9h2v2zm0-4H8V5h2v2zm10 12h-8v-2h2v-2h-2v-2h2v-2h-2V9h8v10zm-2-8h-2v2h2v-2zm0 4h-2v2h2v-2z"/></svg>`;
 
       // Click handler to toggle passenger selection
-      workEl.addEventListener('click', () => {
+      workEl.addEventListener("click", () => {
         workPopup.remove(); // hover-only popup
         togglePassenger(passenger.id);
       });
 
-      const workPopup = new mapboxgl.Popup({ closeButton: false, closeOnClick: false, maxWidth: '320px' })
-        .setHTML(`
+      const workPopup = new mapboxgl.Popup({
+        closeButton: false,
+        closeOnClick: false,
+        maxWidth: "320px",
+      }).setHTML(`
           <div style="padding: 12px; font-family: Arial, sans-serif; line-height: 1.4; color: #1f2937;">
             <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 12px;">
-              <div style="width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; flex-shrink: 0; background-color: ${color}">
+              <div style="width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; flex-shrink: 0;" class="bg-green-600">
                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="white"><path d="M12 7V3H2v18h20V7H12zM6 19H4v-2h2v2zm0-4H4v-2h2v2zm0-4H4V9h2v2zm0-4H4V5h2v2zm4 12H8v-2h2v2zm0-4H8v-2h2v2zm0-4H8V9h2v2zm0-4H8V5h2v2zm10 12h-8v-2h2v-2h-2v-2h2v-2h-2V9h8v10zm-2-8h-2v2h2v-2zm0 4h-2v2h2v-2z"/></svg>
               </div>
               <div style="min-width: 0; flex: 1;">
-                <strong style="display: block; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${passenger.name}</strong>
-                <span style="font-size: 11px; font-weight: bold; color: ${color}">${isSelected ? 'SELECTED - WORK' : 'WORK LOCATION'}</span>
+                <strong style="display: block; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${
+                  passenger.name
+                }</strong>
+                <span class="text-xs ${
+                  isSelected ? "text-green-600 font-bold" : "text-green-600"
+                }">${isSelected ? "SELECTED - WORK" : "WORK LOCATION"}</span>
               </div>
             </div>
             <div style="display: flex; flex-direction: column; gap: 8px; font-size: 12px;">
@@ -515,36 +646,50 @@ export function ReturnRoute({ savedRoutes, onSaveRoute }: ReturnRouteProps) {
                 <span style="flex-shrink: 0;">📞</span>
                 <div style="min-width: 0; flex: 1;">
                   <p style="margin: 0; font-weight: 600; color: #374151;">Phone</p>
-                  <p style="margin: 2px 0 0 0; color: #374151;">${passenger.phone}</p>
+                  <p style="margin: 2px 0 0 0; color: #374151;">${
+                    passenger.phone
+                  }</p>
                 </div>
               </div>
               <div style="border: 1px solid #e5e7eb; border-radius: 6px; padding: 8px; display: flex; gap: 8px; align-items: flex-start;">
                 <span style="flex-shrink: 0;">🏢</span>
                 <div style="min-width: 0; flex: 1; overflow: hidden;">
                   <p style="margin: 0; font-weight: 600; color: #374151;">Pickup Location (Work)</p>
-                  <p style="margin: 2px 0 0 0; color: #374151; font-weight: 500;">${passenger.subPoint || 'N/A'}</p>
-                  <p style="margin: 2px 0 0 0; color: #6b7280; font-size: 11px; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;">${passenger.address || ''}</p>
+                  <p style="margin: 2px 0 0 0; color: #374151; font-weight: 500;">${
+                    passenger.subPoint || "N/A"
+                  }</p>
+                  <p style="margin: 2px 0 0 0; color: #6b7280; font-size: 11px; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;">${
+                    passenger.address || ""
+                  }</p>
                 </div>
               </div>
               <div style="border: 1px solid #e5e7eb; border-radius: 6px; padding: 8px; display: flex; gap: 8px; align-items: flex-start;">
                 <span style="flex-shrink: 0;">🏠</span>
                 <div style="min-width: 0; flex: 1; overflow: hidden;">
                   <p style="margin: 0; font-weight: 600; color: #374151;">Drop-off Location (Home)</p>
-                  <p style="margin: 2px 0 0 0; color: #374151; font-weight: 500;">${passenger.destinationSubPoint || 'N/A'}</p>
-                  <p style="margin: 2px 0 0 0; color: #6b7280; font-size: 11px; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;">${passenger.destination || ''}</p>
+                  <p style="margin: 2px 0 0 0; color: #374151; font-weight: 500;">${
+                    passenger.destinationSubPoint || "N/A"
+                  }</p>
+                  <p style="margin: 2px 0 0 0; color: #6b7280; font-size: 11px; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;">${
+                    passenger.destination || ""
+                  }</p>
                 </div>
               </div>
             </div>
-            ${!isSelected ? '<p style="font-size: 11px; font-weight: 500; cursor: pointer; margin-top: 10px; text-align: center; color: ' + color + '">Click marker to select</p>' : ''}
+            ${
+              !isSelected
+                ? '<p class="text-green-500" style="font-size: 11px; font-weight: 500; cursor: pointer; margin-top: 10px; text-align: center;">Click marker to select</p>'
+                : ""
+            }
           </div>
         `);
 
       // Hover handlers to show/hide popup
-      workEl.addEventListener('mouseenter', () => {
+      workEl.addEventListener("mouseenter", () => {
         workPopup.setLngLat(passenger.coordinates).addTo(map.current!);
       });
 
-      workEl.addEventListener('mouseleave', () => {
+      workEl.addEventListener("mouseleave", () => {
         workPopup.remove();
       });
 
@@ -556,73 +701,108 @@ export function ReturnRoute({ savedRoutes, onSaveRoute }: ReturnRouteProps) {
 
       // Add home destination marker (Home icon) - ALWAYS SHOW
       if (passenger.destinationCoordinates) {
-        const homeEl = document.createElement('div');
-        homeEl.style.width = isSelected ? '30px' : '24px';
-        homeEl.style.height = isSelected ? '30px' : '24px';
-        homeEl.style.borderRadius = '50%';
-        homeEl.style.backgroundColor = color;
-        homeEl.style.border = isSelected ? '3px solid white' : '2px solid white';
-        homeEl.style.boxShadow = isSelected ? '0 4px 8px rgba(0,0,0,0.3)' : '0 2px 4px rgba(0,0,0,0.2)';
-        homeEl.style.display = 'flex';
-        homeEl.style.alignItems = 'center';
-        homeEl.style.justifyContent = 'center';
-        homeEl.style.opacity = isSelected ? '1' : '0.75';
-        homeEl.style.cursor = 'pointer';
-        homeEl.style.transition = 'all 0.2s';
-        homeEl.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="${isSelected ? '16' : '12'}" height="${isSelected ? '16' : '12'}" viewBox="0 0 24 24" fill="white"><path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z"/></svg>`;
+        const homeEl = document.createElement("div");
+        homeEl.style.width = isSelected ? "30px" : "24px";
+        homeEl.style.height = isSelected ? "30px" : "24px";
+        homeEl.style.borderRadius = "50%";
+        homeEl.style.backgroundColor = isSelected ? "#10b981" : "#86efac";
+        homeEl.style.border = isSelected
+          ? "3px solid white"
+          : "2px solid white";
+        homeEl.style.boxShadow = isSelected
+          ? "0 4px 8px rgba(0,0,0,0.3)"
+          : "0 2px 4px rgba(0,0,0,0.2)";
+        homeEl.style.display = "flex";
+        homeEl.style.alignItems = "center";
+        homeEl.style.justifyContent = "center";
+        homeEl.style.opacity = isSelected ? "1" : "0.75";
+        homeEl.style.cursor = "pointer";
+        homeEl.style.transition = "all 0.2s";
+        homeEl.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="${
+          isSelected ? "16" : "12"
+        }" height="${
+          isSelected ? "16" : "12"
+        }" viewBox="0 0 24 24" fill="white"><path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z"/></svg>`;
 
-        homeEl.addEventListener('click', () => {
+        homeEl.addEventListener("click", () => {
           homePopup.remove(); // hover-only popup
           togglePassenger(passenger.id);
         });
 
-        const homePopup = new mapboxgl.Popup({ closeButton: false, closeOnClick: false, maxWidth: '320px' })
-          .setHTML(`
+        const homePopup = new mapboxgl.Popup({
+          closeButton: false,
+          closeOnClick: false,
+          maxWidth: "320px",
+        }).setHTML(`
             <div style="padding: 12px; font-family: Arial, sans-serif; line-height: 1.4; color: #1f2937;">
               <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 12px;">
-                <div style="width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; flex-shrink: 0; background-color: ${color}">
+                <div style="width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; flex-shrink: 0;" class="bg-green-500">
                   <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="white"><path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z"/></svg>
                 </div>
                 <div style="min-width: 0; flex: 1;">
-                  <strong style="display: block; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${passenger.name}</strong>
-                  <span style="font-size: 11px; font-weight: bold; color: ${color}">${isSelected ? 'SELECTED - HOME' : 'HOME DESTINATION'}</span>
+                  <strong style="display: block; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${
+                    passenger.name
+                  } - <span>${passenger.id}</span></strong>
+                  <span style="font-size: 11px; font-weight: bold;"class="text-xs ${
+                    isSelected ? "text-green-600 font-bold" : "text-green-600"
+                  }">${
+          isSelected ? "SELECTED - HOME" : "HOME DESTINATION"
+        }</span>, <span>${passenger.time}</span>
                 </div>
               </div>
+            
+             
               <div style="display: flex; flex-direction: column; gap: 8px; font-size: 12px;">
                 <div style="border: 1px solid #e5e7eb; border-radius: 6px; padding: 8px; display: flex; gap: 8px; align-items: flex-start;">
                   <span style="flex-shrink: 0;">📞</span>
                   <div style="min-width: 0; flex: 1;">
                     <p style="margin: 0; font-weight: 600; color: #374151;">Phone</p>
-                    <p style="margin: 2px 0 0 0; color: #374151;">${passenger.phone}</p>
+                    <p style="margin: 2px 0 0 0; color: #374151;">${
+                      passenger.phone
+                    }</p>
                   </div>
                 </div>
                 <div style="border: 1px solid #e5e7eb; border-radius: 6px; padding: 8px; display: flex; gap: 8px; align-items: flex-start;">
                   <span style="flex-shrink: 0;">🏢</span>
                   <div style="min-width: 0; flex: 1; overflow: hidden;">
                     <p style="margin: 0; font-weight: 600; color: #374151;">Pickup Location (Work)</p>
-                    <p style="margin: 2px 0 0 0; color: #374151; font-weight: 500;">${passenger.subPoint || 'N/A'}</p>
-                    <p style="margin: 2px 0 0 0; color: #6b7280; font-size: 11px; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;">${passenger.address || ''}</p>
+                    <p style="margin: 2px 0 0 0; color: #374151; font-weight: 500;">${
+                      passenger.subPoint || "N/A"
+                    }</p>
+                    <p style="margin: 2px 0 0 0; color: #6b7280; font-size: 11px; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;">${
+                      passenger.address || ""
+                    }</p>
                   </div>
                 </div>
                 <div style="border: 1px solid #e5e7eb; border-radius: 6px; padding: 8px; display: flex; gap: 8px; align-items: flex-start;">
                   <span style="flex-shrink: 0;">🏠</span>
                   <div style="min-width: 0; flex: 1; overflow: hidden;">
                     <p style="margin: 0; font-weight: 600; color: #374151;">Drop-off Location (Home)</p>
-                    <p style="margin: 2px 0 0 0; color: #374151; font-weight: 500;">${passenger.destinationSubPoint || 'N/A'}</p>
-                    <p style="margin: 2px 0 0 0; color: #6b7280; font-size: 11px; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;">${passenger.destination || ''}</p>
+                    <p style="margin: 2px 0 0 0; color: #374151; font-weight: 500;">${
+                      passenger.destinationSubPoint || "N/A"
+                    }</p>
+                    <p style="margin: 2px 0 0 0; color: #6b7280; font-size: 11px; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;">${
+                      passenger.destination || ""
+                    }</p>
                   </div>
                 </div>
               </div>
-              ${!isSelected ? '<p style="font-size: 11px; font-weight: 500; cursor: pointer; margin-top: 10px; text-align: center; color: ' + color + '">Click marker to select</p>' : ''}
+              ${
+                !isSelected
+                  ? '<p class="text-xs text-green-500" style="font-size: 11px; font-weight: 500; cursor: pointer; margin-top: 10px; text-align: center;">Click marker to select</p>'
+                  : ""
+              }
             </div>
           `);
 
         // Hover handlers to show/hide popup
-        homeEl.addEventListener('mouseenter', () => {
-          homePopup.setLngLat(passenger.destinationCoordinates!).addTo(map.current!);
+        homeEl.addEventListener("mouseenter", () => {
+          homePopup
+            .setLngLat(passenger.destinationCoordinates!)
+            .addTo(map.current!);
         });
 
-        homeEl.addEventListener('mouseleave', () => {
+        homeEl.addEventListener("mouseleave", () => {
           homePopup.remove();
         });
 
@@ -637,18 +817,18 @@ export function ReturnRoute({ savedRoutes, onSaveRoute }: ReturnRouteProps) {
     // Auto-fit map to show all markers
     if (markersRef.current.length > 0) {
       const bounds = new mapboxgl.LngLatBounds();
-      
+
       // Add filtered driver coordinates
-      filteredDrivers.forEach(driver => bounds.extend(driver.coordinates));
-      
+      filteredDrivers.forEach((driver) => bounds.extend(driver.coordinates));
+
       // Add all filtered passenger work and home coordinates
-      filteredPassengers.forEach(passenger => {
+      filteredPassengers.forEach((passenger) => {
         bounds.extend(passenger.coordinates);
         if (passenger.destinationCoordinates) {
           bounds.extend(passenger.destinationCoordinates);
         }
       });
-      
+
       map.current.fitBounds(bounds, { padding: 60, maxZoom: 12 });
     }
 
@@ -656,9 +836,9 @@ export function ReturnRoute({ savedRoutes, onSaveRoute }: ReturnRouteProps) {
       calculateRoute();
       setShowBottomPanel(true);
     } else {
-      if (map.current.getLayer('route')) {
-        map.current.removeLayer('route');
-        map.current.removeSource('route');
+      if (map.current.getLayer("route")) {
+        map.current.removeLayer("route");
+        map.current.removeSource("route");
       }
       setRouteInfo(null);
       setShowBottomPanel(false);
@@ -666,27 +846,37 @@ export function ReturnRoute({ savedRoutes, onSaveRoute }: ReturnRouteProps) {
   };
 
   const calculateRoute = async () => {
-    if (!currentDriver || currentPassengers.length === 0 || !map.current) return;
+    if (!currentDriver || currentPassengers.length === 0 || !map.current)
+      return;
 
     setIsCalculating(true);
 
     try {
       // Function to calculate distance between two coordinates (Haversine formula)
-      const getDistance = (coord1: [number, number], coord2: [number, number]): number => {
+      const getDistance = (
+        coord1: [number, number],
+        coord2: [number, number]
+      ): number => {
         const [lon1, lat1] = coord1;
         const [lon2, lat2] = coord2;
         const R = 6371; // Earth's radius in km
-        const dLat = (lat2 - lat1) * Math.PI / 180;
-        const dLon = (lon2 - lon1) * Math.PI / 180;
-        const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
-                  Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
-                  Math.sin(dLon/2) * Math.sin(dLon/2);
-        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+        const dLat = ((lat2 - lat1) * Math.PI) / 180;
+        const dLon = ((lon2 - lon1) * Math.PI) / 180;
+        const a =
+          Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+          Math.cos((lat1 * Math.PI) / 180) *
+            Math.cos((lat2 * Math.PI) / 180) *
+            Math.sin(dLon / 2) *
+            Math.sin(dLon / 2);
+        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
         return R * c;
       };
 
       // Optimize route order using nearest neighbor algorithm
-      const optimizeRoute = (start: [number, number], locations: [number, number][]): [number, number][] => {
+      const optimizeRoute = (
+        start: [number, number],
+        locations: [number, number][]
+      ): [number, number][] => {
         if (locations.length === 0) return [];
         if (locations.length === 1) return locations;
 
@@ -717,31 +907,38 @@ export function ReturnRoute({ savedRoutes, onSaveRoute }: ReturnRouteProps) {
       };
 
       // Separate pickups (from work) and dropoffs (to home)
-      const pickupCoordinates = currentPassengers.map(p => p.coordinates); // Work locations
+      const pickupCoordinates = currentPassengers.map((p) => p.coordinates); // Work locations
       const dropoffCoordinates = currentPassengers
-        .filter(p => p.destinationCoordinates)
-        .map(p => p.destinationCoordinates!); // Home locations
+        .filter((p) => p.destinationCoordinates)
+        .map((p) => p.destinationCoordinates!); // Home locations
 
       // Optimize pickup order starting from driver location
-      const optimizedPickups = optimizeRoute(currentDriver.coordinates, pickupCoordinates);
+      const optimizedPickups = optimizeRoute(
+        currentDriver.coordinates,
+        pickupCoordinates
+      );
 
       // Optimize dropoff order starting from last pickup location
-      const lastPickupLocation = optimizedPickups.length > 0 
-        ? optimizedPickups[optimizedPickups.length - 1] 
-        : currentDriver.coordinates;
-      const optimizedDropoffs = optimizeRoute(lastPickupLocation, dropoffCoordinates);
+      const lastPickupLocation =
+        optimizedPickups.length > 0
+          ? optimizedPickups[optimizedPickups.length - 1]
+          : currentDriver.coordinates;
+      const optimizedDropoffs = optimizeRoute(
+        lastPickupLocation,
+        dropoffCoordinates
+      );
 
       // Build complete optimized route
       const allWaypoints = [
         currentDriver.coordinates,
         ...optimizedPickups,
-        ...optimizedDropoffs
+        ...optimizedDropoffs,
       ];
 
       // Get the full route geometry from Mapbox Directions API
-      const coordinatesStr = allWaypoints.map(c => c.join(',')).join(';');
+      const coordinatesStr = allWaypoints.map((c) => c.join(",")).join(";");
       const url = `https://api.mapbox.com/directions/v5/mapbox/driving/${coordinatesStr}?geometries=geojson&overview=full&steps=true&access_token=${mapboxgl.accessToken}`;
-      
+
       const response = await fetch(url);
       const data = await response.json();
 
@@ -753,51 +950,54 @@ export function ReturnRoute({ savedRoutes, onSaveRoute }: ReturnRouteProps) {
         setRouteInfo({
           distance: distanceKm,
           duration: durationMin,
-          route: route.geometry
+          route: route.geometry,
         });
 
         // Draw the route on the map
-        if (map.current.getSource('route')) {
-          (map.current.getSource('route') as mapboxgl.GeoJSONSource).setData(route.geometry);
+        if (map.current.getSource("route")) {
+          (map.current.getSource("route") as mapboxgl.GeoJSONSource).setData(
+            route.geometry
+          );
         } else {
-          map.current.addSource('route', {
-            type: 'geojson',
-            data: route.geometry
+          map.current.addSource("route", {
+            type: "geojson",
+            data: route.geometry,
           });
 
           map.current.addLayer({
-            id: 'route',
-            type: 'line',
-            source: 'route',
+            id: "route",
+            type: "line",
+            source: "route",
             layout: {
-              'line-join': 'round',
-              'line-cap': 'round'
+              "line-join": "round",
+              "line-cap": "round",
             },
             paint: {
-              'line-color': routeColors[routeColorIndex].primary,
-              'line-width': 5,
-              'line-opacity': 0.8
-            }
+              "line-color": routeColors[routeColorIndex].primary,
+              "line-width": 5,
+              "line-opacity": 0.8,
+            },
           });
         }
 
         // Fit map to show entire route
         const bounds = new mapboxgl.LngLatBounds();
-        allWaypoints.forEach(coord => bounds.extend(coord as [number, number]));
+        allWaypoints.forEach((coord) =>
+          bounds.extend(coord as [number, number])
+        );
         map.current.fitBounds(bounds, { padding: 80 });
       }
-
     } catch (error) {
-      console.error('Error calculating route:', error);
+      console.error("Error calculating route:", error);
     } finally {
       setIsCalculating(false);
     }
   };
 
   const togglePassenger = (passengerId: string) => {
-    setSelectedPassengers(prev =>
+    setSelectedPassengers((prev) =>
       prev.includes(passengerId)
-        ? prev.filter(id => id !== passengerId)
+        ? prev.filter((id) => id !== passengerId)
         : [...prev, passengerId]
     );
   };
@@ -812,14 +1012,19 @@ export function ReturnRoute({ savedRoutes, onSaveRoute }: ReturnRouteProps) {
   const changeRouteColor = () => {
     const nextIndex = (routeColorIndex + 1) % routeColors.length;
     setRouteColorIndex(nextIndex);
-    
-    if (map.current && map.current.getLayer('route')) {
-      map.current.setPaintProperty('route', 'line-color', routeColors[nextIndex].primary);
+
+    if (map.current && map.current.getLayer("route")) {
+      map.current.setPaintProperty(
+        "route",
+        "line-color",
+        routeColors[nextIndex].primary
+      );
     }
   };
 
   const saveRoute = () => {
-    if (!selectedDriver || selectedPassengers.length === 0 || !routeInfo) return;
+    if (!selectedDriver || selectedPassengers.length === 0 || !routeInfo)
+      return;
 
     const driverSnapshot = currentDriver
       ? toParticipantSnapshot(currentDriver)
@@ -828,16 +1033,18 @@ export function ReturnRoute({ savedRoutes, onSaveRoute }: ReturnRouteProps) {
 
     const newRoute: SavedRoute = {
       id: `route-${Date.now()}`,
-      name: `Return Route ${savedRoutes.length + 1}`,
+      name: `Return Route ${returnRoutes.length + 1}`,
       driverId: selectedDriver,
       passengerIds: selectedPassengers,
       routeInfo: routeInfo,
       color: routeColors[routeColorIndex],
       visible: true,
       createdAt: new Date().toISOString(),
-      routeType: 'return', // Add route type for Return Route
+      routeType: "return",
       driverSnapshot,
       passengerSnapshots,
+      date: selectedDate,
+      shift: selectedShift,
     };
 
     onSaveRoute(newRoute);
@@ -861,8 +1068,8 @@ export function ReturnRoute({ savedRoutes, onSaveRoute }: ReturnRouteProps) {
     if (map.current) {
       if (markersRef.current.length > 0) {
         const bounds = new mapboxgl.LngLatBounds();
-        drivers.forEach(driver => bounds.extend(driver.coordinates));
-        passengers.forEach(passenger => {
+        drivers.forEach((driver) => bounds.extend(driver.coordinates));
+        passengers.forEach((passenger) => {
           bounds.extend(passenger.coordinates);
           if (passenger.destinationCoordinates) {
             bounds.extend(passenger.destinationCoordinates);
@@ -895,7 +1102,7 @@ export function ReturnRoute({ savedRoutes, onSaveRoute }: ReturnRouteProps) {
               <span className="font-medium text-sm">{selectedDate}</span>
               <ChevronDown className="w-4 h-4 text-gray-400" />
             </button>
-            
+
             {showDateDropdown && (
               <div className="absolute top-full mt-1 bg-white border rounded-lg shadow-lg w-72 p-4 z-30">
                 <div className="mb-3">
@@ -906,7 +1113,7 @@ export function ReturnRoute({ savedRoutes, onSaveRoute }: ReturnRouteProps) {
                     type="date"
                     value={selectedDate}
                     onChange={(e) => {
-                      setSelectedDate(e.target.value);
+                      dispatch(setReturnDate(e.target.value));
                       setShowDateDropdown(false);
                       clearSelections();
                     }}
@@ -917,11 +1124,17 @@ export function ReturnRoute({ savedRoutes, onSaveRoute }: ReturnRouteProps) {
                   <div className="grid grid-cols-2 gap-2">
                     <button
                       onClick={() => {
-                        setSelectedDate(new Date().toISOString().split('T')[0]);
+                        dispatch(
+                          setReturnDate(new Date().toISOString().split("T")[0])
+                        );
                         setShowDateDropdown(false);
                         clearSelections();
                       }}
-                      className="px-3 py-2 text-xs bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 transition-colors"
+                      className={`px-3 py-2 text-xs rounded-lg transition-colors ${
+                        selectedDate === new Date().toISOString().split("T")[0]
+                          ? "bg-blue-600 text-white"
+                          : "bg-blue-50 text-blue-600 hover:bg-blue-100"
+                      }`}
                     >
                       Today
                     </button>
@@ -929,11 +1142,21 @@ export function ReturnRoute({ savedRoutes, onSaveRoute }: ReturnRouteProps) {
                       onClick={() => {
                         const tomorrow = new Date();
                         tomorrow.setDate(tomorrow.getDate() + 1);
-                        setSelectedDate(tomorrow.toISOString().split('T')[0]);
+                        dispatch(
+                          setReturnDate(tomorrow.toISOString().split("T")[0])
+                        );
                         setShowDateDropdown(false);
                         clearSelections();
                       }}
-                      className="px-3 py-2 text-xs bg-gray-50 text-gray-600 rounded-lg hover:bg-gray-100 transition-colors"
+                      className={`px-3 py-2 text-xs rounded-lg transition-colors ${
+                        selectedDate === (() => {
+                          const t = new Date();
+                          t.setDate(t.getDate() + 1);
+                          return t.toISOString().split("T")[0];
+                        })()
+                          ? "bg-blue-600 text-white"
+                          : "bg-gray-50 text-gray-600 hover:bg-gray-100"
+                      }`}
                     >
                       Tomorrow
                     </button>
@@ -960,19 +1183,21 @@ export function ReturnRoute({ savedRoutes, onSaveRoute }: ReturnRouteProps) {
               <span className="font-medium text-sm">{selectedShift}</span>
               <ChevronDown className="w-4 h-4 text-gray-400" />
             </button>
-            
+
             {showShiftDropdown && (
               <div className="absolute top-full mt-1 bg-white border rounded-lg shadow-lg w-48 py-1 z-30">
-                {shifts.map(shift => (
+                {shifts.map((shift) => (
                   <button
                     key={shift}
                     onClick={() => {
-                      setSelectedShift(shift);
+                      dispatch(setReturnShift(shift));
                       setShowShiftDropdown(false);
                       clearSelections();
                     }}
                     className={`w-full px-4 py-2 text-left text-sm hover:bg-gray-50 transition-colors ${
-                      selectedShift === shift ? 'bg-blue-50 text-blue-600 font-medium' : ''
+                      selectedShift === shift
+                        ? "bg-blue-50 text-blue-600 font-medium"
+                        : ""
                     }`}
                   >
                     {shift}
@@ -997,11 +1222,11 @@ export function ReturnRoute({ savedRoutes, onSaveRoute }: ReturnRouteProps) {
             >
               <Car className="w-4 h-4 text-blue-600" />
               <span className="text-sm flex-1 text-left truncate">
-                {currentDriver ? currentDriver.name : 'Select Driver'}
+                {currentDriver ? currentDriver.name : "Select Driver"}
               </span>
               <ChevronDown className="w-4 h-4 text-gray-400 flex-shrink-0" />
             </button>
-            
+
             {showDriverDropdown && (
               <div className="absolute top-full mt-1 bg-white border rounded-lg shadow-lg w-96 z-30">
                 <div className="p-2 border-b">
@@ -1015,25 +1240,31 @@ export function ReturnRoute({ savedRoutes, onSaveRoute }: ReturnRouteProps) {
                       className="w-full pl-9 pr-3 py-2 text-sm border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
                     />
                   </div>
-                  
+
                   {/* Driver Time Multi-Select Filter */}
                   <div className="relative dropdown-container">
                     <button
-                      onClick={() => setShowDriverTimeDropdown(!showDriverTimeDropdown)}
+                      onClick={() =>
+                        setShowDriverTimeDropdown(!showDriverTimeDropdown)
+                      }
                       className="w-full text-xs border rounded px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-500 flex items-center justify-between bg-white hover:bg-gray-50"
                     >
                       <span className="truncate">
-                        {driverTimeFilter.length === 0 
-                          ? 'All Times' 
-                          : `${driverTimeFilter.length} time${driverTimeFilter.length > 1 ? 's' : ''} selected`}
+                        {driverTimeFilter.length === 0
+                          ? "All Times"
+                          : `${driverTimeFilter.length} time${
+                              driverTimeFilter.length > 1 ? "s" : ""
+                            } selected`}
                       </span>
                       <ChevronDown className="w-3 h-3 text-gray-400 flex-shrink-0 ml-1" />
                     </button>
-                    
+
                     {showDriverTimeDropdown && (
                       <div className="absolute top-full mt-1 bg-white border rounded-lg shadow-lg w-full z-40 max-h-64 overflow-y-auto">
                         <div className="p-2 border-b flex items-center justify-between">
-                          <span className="text-xs font-medium text-gray-700">Select Times</span>
+                          <span className="text-xs font-medium text-gray-700">
+                            Select Times
+                          </span>
                           {driverTimeFilter.length > 0 && (
                             <button
                               onClick={(e) => {
@@ -1046,43 +1277,46 @@ export function ReturnRoute({ savedRoutes, onSaveRoute }: ReturnRouteProps) {
                             </button>
                           )}
                         </div>
-                          {driverTimes.map(time => (
-                            <label
-                              key={time}
-                              className="flex items-center gap-2 px-3 py-2 hover:bg-gray-50 cursor-pointer border-b last:border-b-0"
-                              onClick={(e) => e.stopPropagation()}
-                            >
-                              <input
-                                type="checkbox"
-                                checked={driverTimeFilter.includes(time)}
-                                onChange={(e) => {
-                                  e.stopPropagation();
-                                  setDriverTimeFilter(prev =>
-                                    prev.includes(time)
-                                      ? prev.filter(t => t !== time)
-                                      : [...prev, time]
-                                  );
-                                  setShowDriverTimeDropdown(false);
-                                }}
-                                className="w-3.5 h-3.5 text-blue-600 rounded focus:ring-blue-500"
-                              />
-                              <span className="text-xs flex-1">
-                              {time}
-                              </span>
-                              <span className="text-xs text-gray-400">
-                                {rawDriverData.filter(d => normalizeTime(d.TIME || '') === time).length}
-                              </span>
-                            </label>
-                          ))}
+                        {driverTimes.map((time) => (
+                          <label
+                            key={time}
+                            className="flex items-center gap-2 px-3 py-2 hover:bg-gray-50 cursor-pointer border-b last:border-b-0"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={driverTimeFilter.includes(time)}
+                              onChange={(e) => {
+                                e.stopPropagation();
+                                setDriverTimeFilter((prev) =>
+                                  prev.includes(time)
+                                    ? prev.filter((t) => t !== time)
+                                    : [...prev, time]
+                                );
+                                setShowDriverTimeDropdown(false);
+                              }}
+                              className="w-3.5 h-3.5 text-blue-600 rounded focus:ring-blue-500"
+                            />
+                            <span className="text-xs flex-1">{time}</span>
+                            <span className="text-xs text-gray-400">
+                              {
+                                rawDriverData.filter(
+                                  (d) => normalizeTime(d.TIME || "") === time
+                                ).length
+                              }
+                            </span>
+                          </label>
+                        ))}
                       </div>
                     )}
                   </div>
-                  
+
                   {/* Active Filter Count */}
                   {driverTimeFilter.length > 0 && (
                     <div className="mt-2 flex items-center justify-between">
                       <p className="text-xs text-gray-500">
-                        {filteredDrivers.length} of {availableDrivers.length} drivers
+                        {filteredDrivers.length} of {availableDrivers.length}{" "}
+                        drivers
                       </p>
                       <button
                         onClick={() => {
@@ -1110,26 +1344,38 @@ export function ReturnRoute({ savedRoutes, onSaveRoute }: ReturnRouteProps) {
                       No drivers found
                     </div>
                   ) : (
-                    filteredDrivers.map(driver => (
+                    filteredDrivers.map((driver) => (
                       <button
                         key={driver.id}
                         onClick={() => {
                           setSelectedDriver(driver.id);
                           setShowDriverDropdown(false);
-                          setDriverSearch('');
+                          setDriverSearch("");
                         }}
                         className={`w-full px-4 py-3 text-left hover:bg-gray-50 transition-colors border-b last:border-b-0 ${
-                          selectedDriver === driver.id ? 'bg-blue-50' : ''
+                          selectedDriver === driver.id ? "bg-blue-50" : ""
                         }`}
                       >
                         <div className="flex items-center gap-3">
-                          <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
-                            selectedDriver === driver.id ? 'bg-blue-500' : 'bg-gray-200'
-                          }`}>
-                            <Car className={`w-5 h-5 ${selectedDriver === driver.id ? 'text-white' : 'text-gray-600'}`} />
+                          <div
+                            className={`w-10 h-10 rounded-full flex items-center justify-center ${
+                              selectedDriver === driver.id
+                                ? "bg-blue-500"
+                                : "bg-gray-200"
+                            }`}
+                          >
+                            <Car
+                              className={`w-5 h-5 ${
+                                selectedDriver === driver.id
+                                  ? "text-white"
+                                  : "text-gray-600"
+                              }`}
+                            />
                           </div>
                           <div className="flex-1 min-w-0">
-                            <p className="font-medium text-sm truncate">{driver.name}</p>
+                            <p className="font-medium text-sm truncate">
+                              {driver.name}
+                            </p>
                             <div className="flex items-center gap-2 text-xs text-gray-500">
                               <MapPin className="w-3 h-3" />
                               <span>{driver.subPoint}</span>
@@ -1163,13 +1409,15 @@ export function ReturnRoute({ savedRoutes, onSaveRoute }: ReturnRouteProps) {
             >
               <Users className="w-4 h-4 text-green-600" />
               <span className="text-sm flex-1 text-left">
-                {selectedPassengers.length > 0 
-                  ? `${selectedPassengers.length} Passenger${selectedPassengers.length > 1 ? 's' : ''}`
-                  : 'Select Passengers'}
+                {selectedPassengers.length > 0
+                  ? `${selectedPassengers.length} Passenger${
+                      selectedPassengers.length > 1 ? "s" : ""
+                    }`
+                  : "Select Passengers"}
               </span>
               <ChevronDown className="w-4 h-4 text-gray-400 flex-shrink-0" />
             </button>
-            
+
             {showPassengerDropdown && (
               <div className="absolute top-full mt-1 bg-white border rounded-lg shadow-lg w-[480px] z-30">
                 <div className="p-2 border-b">
@@ -1191,23 +1439,27 @@ export function ReturnRoute({ savedRoutes, onSaveRoute }: ReturnRouteProps) {
                       onChange={(e) => setPickupCityFilter(e.target.value)}
                       className="text-xs border rounded px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-green-500"
                     >
-                      {pickupCities.map(city => (
-                        <option key={city} value={city}>{city === 'All' ? 'All Work' : city}</option>
+                      {pickupCities.map((city) => (
+                        <option key={city} value={city}>
+                          {city === "All" ? "All Work" : city}
+                        </option>
                       ))}
                     </select>
-                    
+
                     {/* Home Destination Filter */}
                     <select
                       value={destinationCityFilter}
                       onChange={(e) => setDestinationCityFilter(e.target.value)}
                       className="text-xs border rounded px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-green-500"
                     >
-                      {destinationCities.map(city => (
-                        <option key={city} value={city}>{city === 'All' ? 'All Home' : city}</option>
+                      {destinationCities.map((city) => (
+                        <option key={city} value={city}>
+                          {city === "All" ? "All Home" : city}
+                        </option>
                       ))}
                     </select>
                   </div>
-                  
+
                   {/* Time Multi-Select Filter */}
                   <div className="mt-2 relative dropdown-container">
                     <button
@@ -1215,17 +1467,21 @@ export function ReturnRoute({ savedRoutes, onSaveRoute }: ReturnRouteProps) {
                       className="w-full text-xs border rounded px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-green-500 flex items-center justify-between bg-white hover:bg-gray-50"
                     >
                       <span className="truncate">
-                        {timeFilter.length === 0 
-                          ? 'All Times' 
-                          : `${timeFilter.length} time${timeFilter.length > 1 ? 's' : ''} selected`}
+                        {timeFilter.length === 0
+                          ? "All Times"
+                          : `${timeFilter.length} time${
+                              timeFilter.length > 1 ? "s" : ""
+                            } selected`}
                       </span>
                       <ChevronDown className="w-3 h-3 text-gray-400 flex-shrink-0 ml-1" />
                     </button>
-                    
+
                     {showTimeDropdown && (
                       <div className="absolute top-full mt-1 bg-white border rounded-lg shadow-lg w-full z-40 max-h-64 overflow-y-auto">
                         <div className="p-2 border-b flex items-center justify-between">
-                          <span className="text-xs font-medium text-gray-700">Select Times</span>
+                          <span className="text-xs font-medium text-gray-700">
+                            Select Times
+                          </span>
                           {timeFilter.length > 0 && (
                             <button
                               onClick={(e) => {
@@ -1239,45 +1495,58 @@ export function ReturnRoute({ savedRoutes, onSaveRoute }: ReturnRouteProps) {
                             </button>
                           )}
                         </div>
-                        {times.filter(t => t !== 'All').map(time => (
-                          <label
-                            key={time}
-                            className="flex items-center gap-2 px-3 py-2 hover:bg-gray-50 cursor-pointer border-b last:border-b-0"
-                            onClick={(e) => e.stopPropagation()}
-                          >
-                            <input
-                              type="checkbox"
-                              checked={timeFilter.includes(time)}
-                              onChange={(e) => {
-                                e.stopPropagation();
-                                if (timeFilter.includes(time)) {
-                                  setTimeFilter(timeFilter.filter(t => t !== time));
-                                } else {
-                                  setTimeFilter([...timeFilter, time]);
+                        {times
+                          .filter((t) => t !== "All")
+                          .map((time) => (
+                            <label
+                              key={time}
+                              className="flex items-center gap-2 px-3 py-2 hover:bg-gray-50 cursor-pointer border-b last:border-b-0"
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              <input
+                                type="checkbox"
+                                checked={timeFilter.includes(time)}
+                                onChange={(e) => {
+                                  e.stopPropagation();
+                                  if (timeFilter.includes(time)) {
+                                    setTimeFilter(
+                                      timeFilter.filter((t) => t !== time)
+                                    );
+                                  } else {
+                                    setTimeFilter([...timeFilter, time]);
+                                  }
+                                  setShowTimeDropdown(false);
+                                }}
+                                className="w-3.5 h-3.5 text-green-600 rounded focus:ring-green-500"
+                              />
+                              <span className="text-xs flex-1">
+                                {time.slice(0, 5)}
+                              </span>
+                              <span className="text-xs text-gray-400">
+                                {
+                                  rawPassengerData.filter(
+                                    (p) => p.TIME === time
+                                  ).length
                                 }
-                                setShowTimeDropdown(false);
-                              }}
-                              className="w-3.5 h-3.5 text-green-600 rounded focus:ring-green-500"
-                            />
-                            <span className="text-xs flex-1">{time.slice(0, 5)}</span>
-                            <span className="text-xs text-gray-400">
-                              {rawPassengerData.filter(p => p.TIME === time).length}
-                            </span>
-                          </label>
-                        ))}
+                              </span>
+                            </label>
+                          ))}
                       </div>
                     )}
                   </div>
                   {/* Active Filter Count */}
-                  {(pickupCityFilter !== 'All' || destinationCityFilter !== 'All' || timeFilter.length > 0) && (
+                  {(pickupCityFilter !== "All" ||
+                    destinationCityFilter !== "All" ||
+                    timeFilter.length > 0) && (
                     <div className="mt-2 flex items-center justify-between">
                       <p className="text-xs text-gray-500">
-                        {filteredPassengers.length} of {passengers.length} passengers
+                        {filteredPassengers.length} of {passengers.length}{" "}
+                        passengers
                       </p>
                       <button
                         onClick={() => {
-                          setPickupCityFilter('All');
-                          setDestinationCityFilter('All');
+                          setPickupCityFilter("All");
+                          setDestinationCityFilter("All");
                           setTimeFilter([]);
                           setShowTimeDropdown(false);
                         }}
@@ -1302,7 +1571,7 @@ export function ReturnRoute({ savedRoutes, onSaveRoute }: ReturnRouteProps) {
                       No passengers found
                     </div>
                   ) : (
-                    filteredPassengers.map(passenger => (
+                    filteredPassengers.map((passenger) => (
                       <label
                         key={passenger.id}
                         className="flex items-center gap-3 px-4 py-3 hover:bg-gray-50 cursor-pointer border-b last:border-b-0"
@@ -1313,11 +1582,18 @@ export function ReturnRoute({ savedRoutes, onSaveRoute }: ReturnRouteProps) {
                           onChange={() => togglePassenger(passenger.id)}
                           className="w-4 h-4 text-green-600 rounded focus:ring-green-500"
                         />
-                        <div className={`w-10 h-10 rounded-full flex items-center justify-center`} style={{ backgroundColor: passenger.color || '#10b981' }}>
+                        <div
+                          className={`w-10 h-10 rounded-full flex items-center justify-center`}
+                          style={{
+                            backgroundColor: passenger.color || "#10b981",
+                          }}
+                        >
                           <Users className={`w-5 h-5 text-white`} />
                         </div>
                         <div className="flex-1 min-w-0">
-                          <p className="font-medium text-sm truncate">{passenger.name}</p>
+                          <p className="font-medium text-sm truncate">
+                            {passenger.name}
+                          </p>
                           <div className="flex items-center gap-2 text-xs text-gray-500">
                             <Building2 className="w-3 h-3" />
                             <span>{passenger.subPoint}</span>
@@ -1348,14 +1624,18 @@ export function ReturnRoute({ savedRoutes, onSaveRoute }: ReturnRouteProps) {
                   <Navigation className="w-4 h-4 text-blue-600" />
                   <div>
                     <p className="text-xs text-gray-500">Distance</p>
-                    <p className="font-bold text-sm text-blue-600">{routeInfo.distance.toFixed(1)} km</p>
+                    <p className="font-bold text-sm text-blue-600">
+                      {routeInfo.distance.toFixed(1)} km
+                    </p>
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
                   <Clock className="w-4 h-4 text-green-600" />
                   <div>
                     <p className="text-xs text-gray-500">Time</p>
-                    <p className="font-bold text-sm text-green-600">{Math.round(routeInfo.duration)} min</p>
+                    <p className="font-bold text-sm text-green-600">
+                      {Math.round(routeInfo.duration)} min
+                    </p>
                   </div>
                 </div>
               </div>
@@ -1388,7 +1668,7 @@ export function ReturnRoute({ savedRoutes, onSaveRoute }: ReturnRouteProps) {
                 <Maximize2 className="w-4 h-4 text-gray-700" />
               </button>
             </div>
-            
+
             {(selectedDriver || selectedPassengers.length > 0) && (
               <Button
                 variant="ghost"
@@ -1405,13 +1685,16 @@ export function ReturnRoute({ savedRoutes, onSaveRoute }: ReturnRouteProps) {
       </div>
 
       {/* Map Area - Full Screen */}
-      <div className="flex-1 relative bg-gray-900" style={{ minHeight: '400px' }}>
-        <div 
-          ref={mapContainer} 
+      <div
+        className="flex-1 relative bg-gray-900"
+        style={{ minHeight: "400px" }}
+      >
+        <div
+          ref={mapContainer}
           className="absolute inset-0 w-full h-full z-0"
-          style={{ minHeight: '400px' }}
+          style={{ minHeight: "400px" }}
         />
-        
+
         {!selectedDriver && selectedPassengers.length === 0 && (
           <div className="absolute top-6 left-1/2 -translate-x-1/2 bg-white px-6 py-3 rounded-lg shadow-lg z-10 border">
             <p className="text-sm text-gray-600 flex items-center gap-2">
@@ -1442,14 +1725,16 @@ export function ReturnRoute({ savedRoutes, onSaveRoute }: ReturnRouteProps) {
                     <p className="font-medium text-sm">{currentDriver?.name}</p>
                   </div>
                 </div>
-                
+
                 <div className="w-px h-10 bg-gray-200"></div>
-                
+
                 <div className="flex items-center gap-2">
                   <Users className="w-5 h-5 text-green-600" />
                   <div>
                     <p className="text-xs text-gray-500">Passengers</p>
-                    <p className="font-medium text-sm">{selectedPassengers.length} selected</p>
+                    <p className="font-medium text-sm">
+                      {selectedPassengers.length} selected
+                    </p>
                   </div>
                 </div>
 
@@ -1461,16 +1746,18 @@ export function ReturnRoute({ savedRoutes, onSaveRoute }: ReturnRouteProps) {
                   onClick={changeRouteColor}
                   className="h-9"
                 >
-                  <div className="w-4 h-4 rounded-full mr-2" style={{ backgroundColor: routeColors[routeColorIndex].primary }}></div>
+                  <div
+                    className="w-4 h-4 rounded-full mr-2"
+                    style={{
+                      backgroundColor: routeColors[routeColorIndex].primary,
+                    }}
+                  ></div>
                   {routeColors[routeColorIndex].name} Route
                 </Button>
               </div>
 
               <div className="flex items-center gap-2">
-                <Button
-                  onClick={saveRoute}
-                  className="h-9"
-                >
+                <Button onClick={saveRoute} className="h-9">
                   <Save className="w-4 h-4 mr-2" />
                   Save Route
                 </Button>
@@ -1490,4 +1777,3 @@ export function ReturnRoute({ savedRoutes, onSaveRoute }: ReturnRouteProps) {
     </div>
   );
 }
-

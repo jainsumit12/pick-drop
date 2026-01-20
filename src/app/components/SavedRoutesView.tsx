@@ -211,6 +211,7 @@ export function SavedRoutesView({
   onDeleteRoute,
   onToggleVisibility,
 }: SavedRoutesViewProps) {
+  
   const mapContainer = useRef<HTMLDivElement>(null);
   const map = useRef<mapboxgl.Map | null>(null);
   const markersRef = useRef<mapboxgl.Marker[]>([]);

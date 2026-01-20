@@ -3,16 +3,18 @@ import { persistStore, persistReducer } from 'redux-persist';
 import storage from 'redux-persist/lib/storage';
 import authReducer from './slices/authSlice';
 import routesReducer from './slices/routesSlice';
+import filterReducer from './slices/filterSlice';
 
 const rootReducer = combineReducers({
   auth: authReducer,
   routes: routesReducer,
+  filters: filterReducer,
 });
 
 const persistConfig = {
   key: 'root',
   storage,
-  whitelist: ['auth', 'routes'], // persist both auth and routes
+  whitelist: ['auth', 'routes', 'filters'], // persist auth, routes, and filters
 };
 
 const persistedReducer = persistReducer(persistConfig, rootReducer);

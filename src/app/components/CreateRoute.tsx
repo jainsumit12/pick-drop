@@ -21,6 +21,8 @@ import {
 import { driversService, passengersService } from "../../api/services";
 import { RouteParticipant, SavedRoute, RouteInfo } from "../../types/route";
 import { ShiftDriver, ShiftPassenger } from "../../types/transport";
+import { useAppDispatch, useAppSelector } from "../../store/hooks";
+import { setGoingDate, setGoingShift } from "../../store/slices/filterSlice";
 
 interface Location {
   id: string;
@@ -104,7 +106,7 @@ const convertRidersToLocations = (
 
     return [
       {
-        id: `${shift}-${extractId(rider.DRIVER_NAME, rider.HOME_LOCATION)}`,
+        id: rider.DRIVER_ID,
         name: extractCleanName(rider.DRIVER_NAME),
         coordinates: [log, lat],
         type: "driver" as const,
@@ -135,7 +137,7 @@ const convertPassengersToLocations = (
 
     return [
       {
-        id: `passenger-${shift}-${passenger.NAME.replace(/\s+/g, "-")}-${index}`,
+        id: passenger.USER_ID,
         name: passenger.NAME,
         coordinates: [pickupLog, pickupLat],
         type: "passenger" as const,
@@ -154,14 +156,16 @@ const convertPassengersToLocations = (
 };
 
 export function CreateRoute({ savedRoutes, onSaveRoute }: CreateRouteProps) {
+  const dispatch = useAppDispatch();
+  const { selectedDate, selectedShift } = useAppSelector((state) => state.filters.going);
+
+  const goingRoutes = savedRoutes.filter(
+    (route) => route.routeType === "going"
+  );
   const mapContainer = useRef<HTMLDivElement>(null);
   const map = useRef<mapboxgl.Map | null>(null);
   const markersRef = useRef<mapboxgl.Marker[]>([]);
 
-  const [selectedShift, setSelectedShift] = useState<string>("Morning");
-  const [selectedDate, setSelectedDate] = useState<string>(
-    new Date().toISOString().split("T")[0]
-  );
   const [selectedDriver, setSelectedDriver] = useState<string | null>(null);
   const [selectedPassengers, setSelectedPassengers] = useState<string[]>([]);
   const [routeInfo, setRouteInfo] = useState<RouteInfo | null>(null);
@@ -276,10 +280,7 @@ export function CreateRoute({ savedRoutes, onSaveRoute }: CreateRouteProps) {
   }, [selectedDate, selectedShift]);
 
   // Get drivers for selected shift
-  const drivers = convertRidersToLocations(
-    driversData,
-    selectedShift
-  );
+  const drivers = convertRidersToLocations(driversData, selectedShift);
 
   // Get passengers for selected shift
   const passengers = convertPassengersToLocations(
@@ -288,20 +289,18 @@ export function CreateRoute({ savedRoutes, onSaveRoute }: CreateRouteProps) {
   );
 
   // Filter out drivers and passengers that are already used in saved GOING routes only
-  const usedDriverIds = new Set(
-    savedRoutes
-      .filter((route) => route.routeType === "going")
-      .map((route) => route.driverId)
-  );
+  // const usedDriverIds = new Set(
+  //   savedRoutes
+  //     .filter((route) => route.routeType === "going")
+  //     .map((route) => route.driverId)
+  // );
   const usedPassengerIds = new Set(
     savedRoutes
       .filter((route) => route.routeType === "going")
       .flatMap((route) => route.passengerIds)
   );
 
-  const availableDrivers = drivers.filter(
-    (driver) => !usedDriverIds.has(driver.id)
-  );
+  const availableDrivers = drivers;
   const availablePassengers = passengers.filter(
     (passenger) => !usedPassengerIds.has(passenger.id)
   );
@@ -327,9 +326,7 @@ export function CreateRoute({ savedRoutes, onSaveRoute }: CreateRouteProps) {
   const rawDriverData = driversData.filter((r) => r.SHIFT === selectedShift);
   const driverTimes = Array.from(
     new Set(
-      rawDriverData
-        .map((r) => normalizeTime(r.TIME || ""))
-        .filter(Boolean)
+      rawDriverData.map((r) => normalizeTime(r.TIME || "")).filter(Boolean)
     )
   ).sort();
 
@@ -356,9 +353,7 @@ export function CreateRoute({ savedRoutes, onSaveRoute }: CreateRouteProps) {
     // If time filter selected, require the driver's time to be in the filter (match passenger logic)
     const matchesTime =
       originalTime !== "" &&
-      driverTimeFilter
-        .map((t) => normalizeTime(t))
-        .includes(originalTime);
+      driverTimeFilter.map((t) => normalizeTime(t)).includes(originalTime);
 
     return matchesSearch && matchesTime;
   });
@@ -517,6 +512,12 @@ export function CreateRoute({ savedRoutes, onSaveRoute }: CreateRouteProps) {
                 }">${isSelected ? "SELECTED DRIVER" : "DRIVER"}</span>
               </div>
             </div>
+            <p class="text-xs text-gray-600 mb-1"><strong>Driver id:</strong> ${
+              driver.id
+            }</p>
+            <p class="text-xs text-gray-600 mb-1"><strong>Time:</strong> ${
+              driver.time
+            }</p>
             <p class="text-xs text-gray-600 mb-1"><strong>Location:</strong> ${
               driver.subPoint
             }</p>
@@ -595,6 +596,12 @@ export function CreateRoute({ savedRoutes, onSaveRoute }: CreateRouteProps) {
                 }">${isSelected ? "SELECTED PICKUP" : "PICKUP"}</span>
               </div>
             </div>
+            <p class="text-xs text-gray-600 mb-1"><strong>Passenger id:</strong> ${
+              passenger.id
+            }</p>
+            <p class="text-xs text-gray-600 mb-1"><strong>Time :</strong> ${
+              passenger.time
+            }</p>
             <p class="text-xs text-gray-600 mb-1"><strong>Location:</strong> ${
               passenger.subPoint
             }</p>
@@ -602,7 +609,9 @@ export function CreateRoute({ savedRoutes, onSaveRoute }: CreateRouteProps) {
               passenger.phone
             }</p>
             <p class="text-xs text-gray-500 mb-2">${passenger.address}</p>
-            <p class="text-xs text-gray-500 mb-2"><strong>Drop Location:</strong> ${passenger.destination}</p>
+            <p class="text-xs text-gray-500 mb-2"><strong>Drop Location:</strong> ${
+              passenger.destination
+            }</p>
             ${
               passenger.destinationSubPoint
                 ? `<p class="text-xs text-orange-600 font-medium"><strong>Destination:</strong> ${passenger.destinationSubPoint}</p>`
@@ -630,7 +639,6 @@ export function CreateRoute({ savedRoutes, onSaveRoute }: CreateRouteProps) {
         .addTo(map.current!);
 
       markersRef.current.push(marker);
-
     });
 
     // Group selected passengers by destination coordinates for drop-off markers
@@ -690,16 +698,24 @@ export function CreateRoute({ savedRoutes, onSaveRoute }: CreateRouteProps) {
                   <span class="text-xs text-orange-600 font-medium">DROP-OFF</span>
                 </div>
               </div>
-              <p class="text-xs text-gray-600 mb-1"><strong>Destination:</strong> ${passenger.destinationSubPoint || "N/A"}</p>
-              <p class="text-xs text-gray-500">${passenger.destination || "N/A"}</p>
+              <p class="text-xs text-gray-600 mb-1"><strong>Destination:</strong> ${
+                passenger.destinationSubPoint || "N/A"
+              }</p>
+              <p class="text-xs text-gray-500">${
+                passenger.destination || "N/A"
+              }</p>
             </div>
           `;
         }
 
         // Multiple passengers - create carousel
         const carouselId = `carousel-${coordKey.replace(/[.,]/g, "-")}`;
-        const passengersHTML = passengersAtDest.map((passenger, index) => `
-          <div class="carousel-slide" data-index="${index}" style="display: ${index === 0 ? "block" : "none"};">
+        const passengersHTML = passengersAtDest
+          .map(
+            (passenger, index) => `
+          <div class="carousel-slide" data-index="${index}" style="display: ${
+              index === 0 ? "block" : "none"
+            };">
             <div class="flex items-center gap-2 mb-2">
               <div class="w-8 h-8 rounded-full bg-orange-500 flex items-center justify-center flex-shrink-0">
                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="white"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/></svg>
@@ -709,10 +725,16 @@ export function CreateRoute({ savedRoutes, onSaveRoute }: CreateRouteProps) {
                 <span class="text-xs text-orange-600 font-medium">DROP-OFF</span>
               </div>
             </div>
-            <p class="text-xs text-gray-600 mb-1"><strong>Destination:</strong> ${passenger.destinationSubPoint || "N/A"}</p>
-            <p class="text-xs text-gray-500 truncate">${passenger.destination || "N/A"}</p>
+            <p class="text-xs text-gray-600 mb-1"><strong>Destination:</strong> ${
+              passenger.destinationSubPoint || "N/A"
+            }</p>
+            <p class="text-xs text-gray-500 truncate">${
+              passenger.destination || "N/A"
+            }</p>
           </div>
-        `).join("");
+        `
+          )
+          .join("");
 
         return `
           <div class="p-2" style="min-width: 220px;">
@@ -754,13 +776,20 @@ export function CreateRoute({ savedRoutes, onSaveRoute }: CreateRouteProps) {
         if (!container) return;
 
         const slides = container.querySelectorAll(".carousel-slide");
-        const indicator = document.querySelector(`.carousel-indicator[data-carousel="${carouselId}"]`);
-        const prevBtn = document.querySelector(`.carousel-prev[data-carousel="${carouselId}"]`);
-        const nextBtn = document.querySelector(`.carousel-next[data-carousel="${carouselId}"]`);
+        const indicator = document.querySelector(
+          `.carousel-indicator[data-carousel="${carouselId}"]`
+        );
+        const prevBtn = document.querySelector(
+          `.carousel-prev[data-carousel="${carouselId}"]`
+        );
+        const nextBtn = document.querySelector(
+          `.carousel-next[data-carousel="${carouselId}"]`
+        );
 
         const showSlide = (index: number) => {
           slides.forEach((slide, i) => {
-            (slide as HTMLElement).style.display = i === index ? "block" : "none";
+            (slide as HTMLElement).style.display =
+              i === index ? "block" : "none";
           });
           if (indicator) {
             indicator.textContent = `${index + 1} / ${passengerCount}`;
@@ -770,13 +799,15 @@ export function CreateRoute({ savedRoutes, onSaveRoute }: CreateRouteProps) {
 
         prevBtn?.addEventListener("click", (e) => {
           e.stopPropagation();
-          const newIndex = currentSlide === 0 ? passengerCount - 1 : currentSlide - 1;
+          const newIndex =
+            currentSlide === 0 ? passengerCount - 1 : currentSlide - 1;
           showSlide(newIndex);
         });
 
         nextBtn?.addEventListener("click", (e) => {
           e.stopPropagation();
-          const newIndex = currentSlide === passengerCount - 1 ? 0 : currentSlide + 1;
+          const newIndex =
+            currentSlide === passengerCount - 1 ? 0 : currentSlide + 1;
           showSlide(newIndex);
         });
 
@@ -1120,16 +1151,18 @@ export function CreateRoute({ savedRoutes, onSaveRoute }: CreateRouteProps) {
 
     const newRoute: SavedRoute = {
       id: `route-${Date.now()}`,
-      name: `Route ${savedRoutes.length + 1}`,
+      name: `Route ${goingRoutes.length + 1}`,
       driverId: selectedDriver,
       passengerIds: selectedPassengers,
       routeInfo: routeInfo,
       color: routeColors[routeColorIndex],
       visible: true,
       createdAt: new Date().toISOString(),
-      routeType: "going", // Add route type for Going Route
+      routeType: "going",
       driverSnapshot,
       passengerSnapshots,
+      date: selectedDate,
+      shift: selectedShift,
     };
 
     onSaveRoute(newRoute);
@@ -1192,7 +1225,7 @@ export function CreateRoute({ savedRoutes, onSaveRoute }: CreateRouteProps) {
                     type="date"
                     value={selectedDate}
                     onChange={(e) => {
-                      setSelectedDate(e.target.value);
+                      dispatch(setGoingDate(e.target.value));
                       setShowDateDropdown(false);
                       clearSelections();
                     }}
@@ -1203,11 +1236,15 @@ export function CreateRoute({ savedRoutes, onSaveRoute }: CreateRouteProps) {
                   <div className="grid grid-cols-2 gap-2">
                     <button
                       onClick={() => {
-                        setSelectedDate(new Date().toISOString().split("T")[0]);
+                        dispatch(setGoingDate(new Date().toISOString().split("T")[0]));
                         setShowDateDropdown(false);
                         clearSelections();
                       }}
-                      className="px-3 py-2 text-xs bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 transition-colors"
+                      className={`px-3 py-2 text-xs rounded-lg transition-colors ${
+                        selectedDate === new Date().toISOString().split("T")[0]
+                          ? "bg-blue-600 text-white"
+                          : "bg-blue-50 text-blue-600 hover:bg-blue-100"
+                      }`}
                     >
                       Today
                     </button>
@@ -1215,11 +1252,19 @@ export function CreateRoute({ savedRoutes, onSaveRoute }: CreateRouteProps) {
                       onClick={() => {
                         const tomorrow = new Date();
                         tomorrow.setDate(tomorrow.getDate() + 1);
-                        setSelectedDate(tomorrow.toISOString().split("T")[0]);
+                        dispatch(setGoingDate(tomorrow.toISOString().split("T")[0]));
                         setShowDateDropdown(false);
                         clearSelections();
                       }}
-                      className="px-3 py-2 text-xs bg-gray-50 text-gray-600 rounded-lg hover:bg-gray-100 transition-colors"
+                      className={`px-3 py-2 text-xs rounded-lg transition-colors ${
+                        selectedDate === (() => {
+                          const t = new Date();
+                          t.setDate(t.getDate() + 1);
+                          return t.toISOString().split("T")[0];
+                        })()
+                          ? "bg-blue-600 text-white"
+                          : "bg-gray-50 text-gray-600 hover:bg-gray-100"
+                      }`}
                     >
                       Tomorrow
                     </button>
@@ -1249,7 +1294,7 @@ export function CreateRoute({ savedRoutes, onSaveRoute }: CreateRouteProps) {
                   <button
                     key={shift}
                     onClick={() => {
-                      setSelectedShift(shift);
+                      dispatch(setGoingShift(shift));
                       setShowShiftDropdown(false);
                       clearSelections();
                     }}
@@ -1324,16 +1369,16 @@ export function CreateRoute({ savedRoutes, onSaveRoute }: CreateRouteProps) {
                             Select Times
                           </span>
                           {driverTimeFilter.length > 0 && (
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setDriverTimeFilter([]);
-                              setShowDriverTimeDropdown(false);
-                            }}
-                            className="text-xs text-blue-600 hover:underline"
-                          >
-                            Clear all
-                          </button>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setDriverTimeFilter([]);
+                                setShowDriverTimeDropdown(false);
+                              }}
+                              className="text-xs text-blue-600 hover:underline"
+                            >
+                              Clear all
+                            </button>
                           )}
                         </div>
                         {driverTimes.map((time) => (
@@ -1356,13 +1401,11 @@ export function CreateRoute({ savedRoutes, onSaveRoute }: CreateRouteProps) {
                               }}
                               className="w-3.5 h-3.5 text-blue-600 rounded focus:ring-blue-500"
                             />
-                            <span className="text-xs flex-1">
-                              {time}
-                            </span>
+                            <span className="text-xs flex-1">{time}</span>
                             <span className="text-xs text-gray-400">
                               {
-                                rawDriverData.filter((d) =>
-                                  normalizeTime(d.TIME || "") === time
+                                rawDriverData.filter(
+                                  (d) => normalizeTime(d.TIME || "") === time
                                 ).length
                               }
                             </span>
@@ -1742,11 +1785,7 @@ export function CreateRoute({ savedRoutes, onSaveRoute }: CreateRouteProps) {
             </div>
 
             {(selectedDriver || selectedPassengers.length > 0) && (
-              <Button
-                size="sm"
-                onClick={clearSelections}
-                className="h-9"
-              >
+              <Button size="sm" onClick={clearSelections} className="h-9">
                 <X className="w-4 h-4 mr-1" />
                 Clear
               </Button>
