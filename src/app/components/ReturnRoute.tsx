@@ -240,6 +240,7 @@ export function ReturnRoute({ savedRoutes, onSaveRoute }: ReturnRouteProps) {
     useState<string>("All");
   const [timeFilter, setTimeFilter] = useState<string[]>([]); // Passenger time filter
   const [driverTimeFilter, setDriverTimeFilter] = useState<string[]>([]); // Driver time filter
+  const [checkedDrivers, setCheckedDrivers] = useState<string[]>([]); // Drivers visible on map
 
   const [showTimeDropdown, setShowTimeDropdown] = useState(false);
   const [showDriverTimeDropdown, setShowDriverTimeDropdown] = useState(false);
@@ -295,6 +296,7 @@ export function ReturnRoute({ savedRoutes, onSaveRoute }: ReturnRouteProps) {
 
     setDriversError(null);
     setPassengersError(null);
+    setCheckedDrivers([]);
   }, [normalizedShift, selectedDate, savedRouteData]);
 
   // Get drivers for selected shift
@@ -480,6 +482,7 @@ export function ReturnRoute({ savedRoutes, onSaveRoute }: ReturnRouteProps) {
     driverTimeFilter,
     passengerSearch,
     driverSearch,
+    checkedDrivers,
   ]);
 
   const updateMarkersAndRoute = () => {
@@ -488,8 +491,13 @@ export function ReturnRoute({ savedRoutes, onSaveRoute }: ReturnRouteProps) {
     markersRef.current.forEach((marker) => marker.remove());
     markersRef.current = [];
 
-    // Add driver markers based on filter
-    filteredDrivers.forEach((driver) => {
+    // Add driver markers based on filter and checkbox selection
+    const driversToShow =
+      checkedDrivers.length > 0
+        ? filteredDrivers.filter((d) => checkedDrivers.includes(d.id))
+        : filteredDrivers;
+
+    driversToShow.forEach((driver) => {
       const isSelected = driver.id === selectedDriver;
       const el = document.createElement("div");
       el.style.width = isSelected ? "40px" : "32px";
@@ -1330,7 +1338,11 @@ export function ReturnRoute({ savedRoutes, onSaveRoute }: ReturnRouteProps) {
             >
               <Car className="w-4 h-4 text-blue-600" />
               <span className="text-sm flex-1 text-left truncate">
-                {currentDriver ? currentDriver.name : "Select Driver"}
+                {checkedDrivers.length > 0
+                  ? `${checkedDrivers.length} Driver${
+                      checkedDrivers.length > 1 ? "s" : ""
+                    } on Map`
+                  : "Select Drivers"}
               </span>
               <ChevronDown className="w-4 h-4 text-gray-400 flex-shrink-0" />
             </button>
@@ -1437,6 +1449,36 @@ export function ReturnRoute({ savedRoutes, onSaveRoute }: ReturnRouteProps) {
                       </button>
                     </div>
                   )}
+
+                  {/* Select All / Clear All for map visibility */}
+                  {filteredDrivers.length > 0 && (
+                    <div className="mt-2 flex items-center justify-between">
+                      <p className="text-xs text-gray-500">
+                        {checkedDrivers.length} of {filteredDrivers.length} on
+                        map
+                      </p>
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => {
+                            setCheckedDrivers(filteredDrivers.map((d) => d.id));
+                          }}
+                          className="text-xs text-blue-600 hover:underline"
+                        >
+                          Select all
+                        </button>
+                        {checkedDrivers.length > 0 && (
+                          <button
+                            onClick={() => {
+                              setCheckedDrivers([]);
+                            }}
+                            className="text-xs text-red-600 hover:underline"
+                          >
+                            Clear all
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  )}
                 </div>
                 <div className="max-h-80 overflow-y-auto">
                   {driversLoading ? (
@@ -1453,50 +1495,53 @@ export function ReturnRoute({ savedRoutes, onSaveRoute }: ReturnRouteProps) {
                     </div>
                   ) : (
                     filteredDrivers.map((driver) => (
-                      <button
+                      <div
                         key={driver.id}
-                        onClick={() => {
-                          setSelectedDriver(driver.id);
-                          setShowDriverDropdown(false);
-                          setDriverSearch("");
-                        }}
-                        className={`w-full px-4 py-3 text-left hover:bg-gray-50 transition-colors border-b last:border-b-0 ${
-                          selectedDriver === driver.id ? "bg-blue-50" : ""
+                        className={`flex items-center gap-3 px-4 py-3 hover:bg-gray-50 border-b last:border-b-0 ${
+                          checkedDrivers.includes(driver.id) ? "bg-blue-50" : ""
                         }`}
                       >
-                        <div className="flex items-center gap-3">
-                          <div
-                            className={`w-10 h-10 rounded-full flex items-center justify-center ${
-                              selectedDriver === driver.id
-                                ? "bg-blue-500"
-                                : "bg-gray-200"
+                        <input
+                          type="checkbox"
+                          checked={checkedDrivers.includes(driver.id)}
+                          onChange={(e) => {
+                            e.stopPropagation();
+                            setCheckedDrivers((prev) =>
+                              prev.includes(driver.id)
+                                ? prev.filter((id) => id !== driver.id)
+                                : [...prev, driver.id]
+                            );
+                          }}
+                          className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500 cursor-pointer"
+                        />
+                        <div
+                          className={`w-10 h-10 rounded-full flex items-center justify-center ${
+                            checkedDrivers.includes(driver.id)
+                              ? "bg-blue-500"
+                              : "bg-gray-200"
+                          }`}
+                        >
+                          <Car
+                            className={`w-5 h-5 ${
+                              checkedDrivers.includes(driver.id)
+                                ? "text-white"
+                                : "text-gray-600"
                             }`}
-                          >
-                            <Car
-                              className={`w-5 h-5 ${
-                                selectedDriver === driver.id
-                                  ? "text-white"
-                                  : "text-gray-600"
-                              }`}
-                            />
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <p className="font-medium text-sm truncate">
-                              {driver.name}
-                            </p>
-                            <div className="flex items-center gap-2 text-xs text-gray-500">
-                              <MapPin className="w-3 h-3" />
-                              <span>{driver.subPoint}</span>
-                              <span>•</span>
-                              <Phone className="w-3 h-3" />
-                              <span>{driver.phone}</span>
-                            </div>
-                          </div>
-                          {selectedDriver === driver.id && (
-                            <Badge className="bg-blue-500">Selected</Badge>
-                          )}
+                          />
                         </div>
-                      </button>
+                        <div className="flex-1 min-w-0">
+                          <p className="font-medium text-sm truncate">
+                            {driver.name}
+                          </p>
+                          <div className="flex items-center gap-2 text-xs text-gray-500">
+                            <MapPin className="w-3 h-3" />
+                            <span>{driver.subPoint}</span>
+                            <span>•</span>
+                            <Phone className="w-3 h-3" />
+                            <span>{driver.phone}</span>
+                          </div>
+                        </div>
+                      </div>
                     ))
                   )}
                 </div>
