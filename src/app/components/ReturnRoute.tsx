@@ -19,12 +19,17 @@ import {
   Home,
   Building2,
   Calendar,
+  RefreshCw,
+  Download,
+  Loader2,
 } from "lucide-react";
 import { driversService, passengersService } from "../../api/services";
 import { RouteParticipant, SavedRoute, RouteInfo } from "../../types/route";
 import { ShiftDriver, ShiftPassenger } from "../../types/transport";
 import { useAppDispatch, useAppSelector } from "../../store/hooks";
 import { setReturnDate, setReturnShift } from "../../store/slices/filterSlice";
+import { saveRouteData } from "../../store/slices/dataSlice";
+import { SHIFT_TYPES, normalizeShift } from "../../constants/shifts";
 
 interface Location {
   id: string;
@@ -242,7 +247,7 @@ export function ReturnRoute({ savedRoutes, onSaveRoute }: ReturnRouteProps) {
   // Bottom panel state
   const [showBottomPanel, setShowBottomPanel] = useState(false);
 
-  const shifts = ["Morning", "Afternoon", "Evening", "Night"];
+  const shifts = SHIFT_TYPES;
 
   const routeColors = [
     { primary: "#3b82f6", name: "Blue" },
@@ -252,74 +257,45 @@ export function ReturnRoute({ savedRoutes, onSaveRoute }: ReturnRouteProps) {
     { primary: "#10b981", name: "Green" },
   ];
 
+  const routeType: "return" = "return";
+  const routeTypeLabel =
+    routeType.charAt(0).toUpperCase() + routeType.slice(1);
+  const normalizedShift = normalizeShift(selectedShift);
+  const savedRouteData = useAppSelector(
+    (state) => state.data.byDate[selectedDate]?.return?.[normalizedShift]
+  );
+
+  const formatLastFetched = (timestamp?: string | null) => {
+    if (!timestamp) return null;
+    const date = new Date(timestamp);
+    if (Number.isNaN(date.getTime())) return null;
+    return date.toLocaleString([], {
+      hour: "numeric",
+      minute: "numeric",
+      hour12: true,
+      month: "short",
+      day: "numeric",
+    });
+  };
+  const lastFetchedLabel = formatLastFetched(savedRouteData?.lastFetched);
+
+  // Load data from Redux if available, otherwise start with empty arrays
   useEffect(() => {
-    let cancelled = false;
-    const loadDrivers = async () => {
-      try {
-        setDriversLoading(true);
-        setDriversError(null);
-        const formattedDate = formatDateForApi(selectedDate);
-        const shift = selectedShift.toLowerCase();
-        const data = await driversService.getDriversByShift(
-          formattedDate,
-          "return",
-          shift
-        );
-        if (!cancelled) {
-          setDriversData(Array.isArray(data) ? (data as ShiftDriver[]) : []);
-        }
-      } catch (error: any) {
-        if (!cancelled) {
-          setDriversError(error?.message || "Failed to load drivers");
-          setDriversData([]);
-        }
-      } finally {
-        if (!cancelled) {
-          setDriversLoading(false);
-        }
-      }
-    };
+    const hasReduxData =
+      (savedRouteData?.drivers.length ?? 0) > 0 ||
+      (savedRouteData?.passengers.length ?? 0) > 0;
 
-    loadDrivers();
-    return () => {
-      cancelled = true;
-    };
-  }, [selectedDate, selectedShift]);
+    if (hasReduxData && savedRouteData) {
+      setDriversData(savedRouteData.drivers);
+      setPassengersData(savedRouteData.passengers);
+    } else {
+      setDriversData([]);
+      setPassengersData([]);
+    }
 
-  useEffect(() => {
-    let cancelled = false;
-    const loadPassengers = async () => {
-      try {
-        setPassengersLoading(true);
-        setPassengersError(null);
-        const shift = selectedShift.toLowerCase();
-        const data = await passengersService.getPassengersByShiftDateRoute(
-          selectedDate,
-          "return",
-          shift
-        );
-        if (!cancelled) {
-          setPassengersData(
-            Array.isArray(data) ? (data as ShiftPassenger[]) : []
-          );
-        }
-      } catch (error: any) {
-        if (!cancelled) {
-          setPassengersError(error?.message || "Failed to load passengers");
-          setPassengersData([]);
-        }
-      } finally {
-        if (!cancelled) {
-          setPassengersLoading(false);
-        }
-      }
-    };
-
-    loadPassengers();
-    return () => {
-      cancelled = true;
-    };
-  }, [selectedDate, selectedShift]);
+    setDriversError(null);
+    setPassengersError(null);
+  }, [normalizedShift, selectedDate, savedRouteData]);
 
   // Get drivers for selected shift
   const drivers = convertRidersToLocations(driversData, selectedShift);
@@ -329,6 +305,11 @@ export function ReturnRoute({ savedRoutes, onSaveRoute }: ReturnRouteProps) {
     passengersData,
     selectedShift
   );
+
+  const displayDriverCount =
+    savedRouteData?.drivers.length ?? drivers.length;
+  const displayPassengerCount =
+    savedRouteData?.passengers.length ?? passengers.length;
 
   // Filter out drivers and passengers that are already used in saved RETURN routes only
   // const usedDriverIds = new Set(
@@ -593,28 +574,55 @@ export function ReturnRoute({ savedRoutes, onSaveRoute }: ReturnRouteProps) {
     filteredPassengers.forEach((passenger) => {
       const isSelected = selectedPassengers.includes(passenger.id);
       const color = passenger.color || "#10b981";
-      console.log(passenger, "passenger");
 
-      // Add work location marker (Building icon)
+      // Format time for display (show only HH:MM)
+      const displayTime = passenger.time ? passenger.time.slice(0, 5) : "";
+
+      // Add work location marker (Building icon) with time label
       const workEl = document.createElement("div");
-      workEl.style.width = isSelected ? "34px" : "26px";
-      workEl.style.height = isSelected ? "34px" : "26px";
-      workEl.style.borderRadius = "50%";
-      workEl.style.backgroundColor = isSelected ? "#10b981" : "#86efac";
-      workEl.style.border = isSelected ? "3px solid white" : "2px solid white";
-      workEl.style.boxShadow = isSelected
-        ? "0 4px 8px rgba(0,0,0,0.3)"
-        : "0 2px 4px rgba(0,0,0,0.2)";
       workEl.style.display = "flex";
+      workEl.style.flexDirection = "column";
       workEl.style.alignItems = "center";
-      workEl.style.justifyContent = "center";
       workEl.style.cursor = "pointer";
       workEl.style.transition = "all 0.2s";
-      workEl.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="${
-        isSelected ? "18" : "14"
-      }" height="${
-        isSelected ? "18" : "14"
-      }" viewBox="0 0 24 24" fill="white"><path d="M12 7V3H2v18h20V7H12zM6 19H4v-2h2v2zm0-4H4v-2h2v2zm0-4H4V9h2v2zm0-4H4V5h2v2zm4 12H8v-2h2v2zm0-4H8v-2h2v2zm0-4H8V9h2v2zm0-4H8V5h2v2zm10 12h-8v-2h2v-2h-2v-2h2v-2h-2V9h8v10zm-2-8h-2v2h2v-2zm0 4h-2v2h2v-2z"/></svg>`;
+
+      workEl.innerHTML = `
+        <div style="
+          width: ${isSelected ? "32px" : "24px"};
+          height: ${isSelected ? "32px" : "24px"};
+          border-radius: 50%;
+          background-color: ${isSelected ? "#10b981" : "#86efac"};
+          border: ${isSelected ? "3px solid white" : "2px solid white"};
+          box-shadow: ${
+            isSelected
+              ? "0 4px 8px rgba(0,0,0,0.3)"
+              : "0 2px 4px rgba(0,0,0,0.2)"
+          };
+          display: flex;
+          align-items: center;
+          justify-content: center;
+        ">
+          <svg xmlns="http://www.w3.org/2000/svg" width="${
+            isSelected ? "16" : "12"
+          }" height="${
+        isSelected ? "16" : "12"
+      }" viewBox="0 0 24 24" fill="white"><path d="M12 7V3H2v18h20V7H12zM6 19H4v-2h2v2zm0-4H4v-2h2v2zm0-4H4V9h2v2zm0-4H4V5h2v2zm4 12H8v-2h2v2zm0-4H8v-2h2v2zm0-4H8V9h2v2zm0-4H8V5h2v2zm10 12h-8v-2h2v-2h-2v-2h2v-2h-2V9h8v10zm-2-8h-2v2h2v-2zm0 4h-2v2h2v-2z"/></svg>
+        </div>
+        ${
+          displayTime
+            ? `<div style="
+          background-color: #036ffc;
+          color: white;
+          font-size: 9px;
+          font-weight: 600;
+          padding: 2px 5px;
+          border-radius: 4px;
+          margin-top: 2px;
+          white-space: nowrap;
+          box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+        ">${displayTime}</div>`
+            : ""
+        }`;
 
       // Click handler to toggle passenger selection
       workEl.addEventListener("click", () => {
@@ -699,30 +707,53 @@ export function ReturnRoute({ savedRoutes, onSaveRoute }: ReturnRouteProps) {
 
       markersRef.current.push(workMarker);
 
-      // Add home destination marker (Home icon) - ALWAYS SHOW
+      // Add home destination marker (Home icon) with time label - ALWAYS SHOW
       if (passenger.destinationCoordinates) {
         const homeEl = document.createElement("div");
-        homeEl.style.width = isSelected ? "30px" : "24px";
-        homeEl.style.height = isSelected ? "30px" : "24px";
-        homeEl.style.borderRadius = "50%";
-        homeEl.style.backgroundColor = isSelected ? "#10b981" : "#86efac";
-        homeEl.style.border = isSelected
-          ? "3px solid white"
-          : "2px solid white";
-        homeEl.style.boxShadow = isSelected
-          ? "0 4px 8px rgba(0,0,0,0.3)"
-          : "0 2px 4px rgba(0,0,0,0.2)";
         homeEl.style.display = "flex";
+        homeEl.style.flexDirection = "column";
         homeEl.style.alignItems = "center";
-        homeEl.style.justifyContent = "center";
-        homeEl.style.opacity = isSelected ? "1" : "0.75";
         homeEl.style.cursor = "pointer";
         homeEl.style.transition = "all 0.2s";
-        homeEl.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="${
-          isSelected ? "16" : "12"
-        }" height="${
-          isSelected ? "16" : "12"
-        }" viewBox="0 0 24 24" fill="white"><path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z"/></svg>`;
+
+        homeEl.innerHTML = `
+          <div style="
+            width: ${isSelected ? "28px" : "22px"};
+            height: ${isSelected ? "28px" : "22px"};
+            border-radius: 50%;
+            background-color: ${isSelected ? "#10b981" : "#86efac"};
+            border: ${isSelected ? "3px solid white" : "2px solid white"};
+            box-shadow: ${
+              isSelected
+                ? "0 4px 8px rgba(0,0,0,0.3)"
+                : "0 2px 4px rgba(0,0,0,0.2)"
+            };
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            opacity: ${isSelected ? "1" : "0.75"};
+          ">
+            <svg xmlns="http://www.w3.org/2000/svg" width="${
+              isSelected ? "14" : "10"
+            }" height="${
+          isSelected ? "14" : "10"
+        }" viewBox="0 0 24 24" fill="white"><path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z"/></svg>
+          </div>
+          ${
+            displayTime
+              ? `<div style="
+            background-color: #036ffc;
+            color: white;
+            font-size: 9px;
+            font-weight: 600;
+            padding: 2px 5px;
+            border-radius: 4px;
+            margin-top: 2px;
+            white-space: nowrap;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+          ">${displayTime}</div>`
+              : ""
+          }`;
 
         homeEl.addEventListener("click", () => {
           homePopup.remove(); // hover-only popup
@@ -1082,6 +1113,51 @@ export function ReturnRoute({ savedRoutes, onSaveRoute }: ReturnRouteProps) {
     }
   };
 
+  const fetchRouteParticipants = async () => {
+    const requestDate = selectedDate;
+    const requestShift = normalizedShift;
+    const isStaleRequest = () =>
+      requestDate !== selectedDate ||
+      requestShift !== normalizeShift(selectedShift);
+    try {
+      setDriversLoading(true);
+      setPassengersLoading(true);
+      setDriversError(null);
+      setPassengersError(null);
+
+      const formattedDate = formatDateForApi(requestDate);
+      const shift = requestShift.toLowerCase();
+
+      const [driversResult, passengersResult] = await Promise.all([
+        driversService.getDriversByShift(formattedDate, routeType, shift),
+        passengersService.getPassengersByShiftDateRoute(
+          requestDate,
+          routeType,
+          shift
+        ),
+      ]);
+
+      if (isStaleRequest()) {
+        return;
+      }
+
+      setDriversData(Array.isArray(driversResult) ? driversResult : []);
+      setPassengersData(
+        Array.isArray(passengersResult) ? passengersResult : []
+      );
+    } catch (error: any) {
+      if (isStaleRequest()) {
+        return;
+      }
+      const message = error?.message || "Failed to fetch data";
+      setDriversError(message);
+      setPassengersError(message);
+    } finally {
+      setDriversLoading(false);
+      setPassengersLoading(false);
+    }
+  };
+
   return (
     <div className="h-full flex flex-col">
       {/* Top Navigation Bar */}
@@ -1204,6 +1280,38 @@ export function ReturnRoute({ savedRoutes, onSaveRoute }: ReturnRouteProps) {
                   </button>
                 ))}
               </div>
+            )}
+          </div>
+
+          <div className="flex items-center gap-4 text-xs text-gray-500 whitespace-nowrap">
+           
+            <div className="flex items-center gap-1">
+              <Car className="w-3 h-3 text-blue-600" />
+              <span className="font-semibold text-gray-600">
+                {displayDriverCount} driver
+                {displayDriverCount === 1 ? "" : "s"}
+              </span>
+            </div>
+            <div className="flex items-center gap-1">
+              <Users className="w-3 h-3 text-green-600" />
+              <span className="font-semibold text-gray-600">
+                {displayPassengerCount} passenger
+                {displayPassengerCount === 1 ? "" : "s"}
+              </span>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-3 text-xs text-gray-500">
+            {(driversLoading || passengersLoading) && (
+              <div className="flex items-center gap-1 text-blue-600">
+                <Loader2 className="w-3 h-3 animate-spin text-blue-600" />
+                <span>Loading drivers & passengers...</span>
+              </div>
+            )}
+            {lastFetchedLabel && (
+              <span className="px-2 py-1 text-[11px] uppercase tracking-wider text-gray-500">
+                Updated {lastFetchedLabel}
+              </span>
             )}
           </div>
 
@@ -1616,34 +1724,45 @@ export function ReturnRoute({ savedRoutes, onSaveRoute }: ReturnRouteProps) {
           </div>
 
           {/* Route Info Display */}
-          {routeInfo && (
-            <>
-              <div className="w-px h-8 bg-gray-200"></div>
-              <div className="flex items-center gap-4">
-                <div className="flex items-center gap-2">
-                  <Navigation className="w-4 h-4 text-blue-600" />
-                  <div>
-                    <p className="text-xs text-gray-500">Distance</p>
-                    <p className="font-bold text-sm text-blue-600">
-                      {routeInfo.distance.toFixed(1)} km
-                    </p>
-                  </div>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Clock className="w-4 h-4 text-green-600" />
-                  <div>
-                    <p className="text-xs text-gray-500">Time</p>
-                    <p className="font-bold text-sm text-green-600">
-                      {Math.round(routeInfo.duration)} min
-                    </p>
-                  </div>
-                </div>
-              </div>
-            </>
-          )}
+         
 
           {/* Actions */}
           <div className="ml-auto flex items-center gap-2">
+            {/* Fetch Data Button */}
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={fetchRouteParticipants}
+              disabled={driversLoading || passengersLoading}
+              className="h-9"
+            >
+              <RefreshCw className={`w-4 h-4 mr-1 ${driversLoading || passengersLoading ? "animate-spin" : ""}`} />
+              {driversLoading || passengersLoading ? "Fetching..." : "Fetch Data"}
+            </Button>
+
+            {/* Save Data Button */}
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                dispatch(
+                  saveRouteData({
+                    routeType: "return",
+                    shift: normalizedShift,
+                    date: selectedDate,
+                    drivers: driversData,
+                    passengers: passengersData,
+                  })
+                );
+                alert(`Data saved for ${selectedShift} shift (Return route)`);
+              }}
+              disabled={driversData.length === 0 && passengersData.length === 0}
+              className="h-9"
+            >
+              <Download className="w-4 h-4 mr-1" />
+              Save Data
+            </Button>
+
             {/* Map Navigation Controls */}
             <div className="flex items-center gap-1 border rounded-lg overflow-hidden">
               <button
@@ -1695,6 +1814,15 @@ export function ReturnRoute({ savedRoutes, onSaveRoute }: ReturnRouteProps) {
           style={{ minHeight: "400px" }}
         />
 
+        {(driversLoading || passengersLoading) && (
+          <div className="absolute inset-0 z-10 flex flex-col items-center justify-center bg-white/80 backdrop-blur">
+            <Loader2 className="w-8 h-8 mb-2 animate-spin text-blue-600" />
+            <p className="text-sm font-semibold text-blue-700">
+              Fetching drivers & passengers
+            </p>
+          </div>
+        )}
+
         {!selectedDriver && selectedPassengers.length === 0 && (
           <div className="absolute top-6 left-1/2 -translate-x-1/2 bg-white px-6 py-3 rounded-lg shadow-lg z-10 border">
             <p className="text-sm text-gray-600 flex items-center gap-2">
@@ -1734,6 +1862,30 @@ export function ReturnRoute({ savedRoutes, onSaveRoute }: ReturnRouteProps) {
                     <p className="text-xs text-gray-500">Passengers</p>
                     <p className="font-medium text-sm">
                       {selectedPassengers.length} selected
+                    </p>
+                  </div>
+                </div>
+
+                <div className="w-px h-10 bg-gray-200"></div>
+
+                <div className="flex items-center gap-2">
+                  <Navigation className="w-5 h-5 text-blue-600" />
+                  <div>
+                    <p className="text-xs text-gray-500">Distance</p>
+                    <p className="font-bold text-sm text-blue-600">
+                      {routeInfo.distance.toFixed(1)} km
+                    </p>
+                  </div>
+                </div>
+
+                <div className="w-px h-10 bg-gray-200"></div>
+
+                <div className="flex items-center gap-2">
+                  <Clock className="w-5 h-5 text-green-600" />
+                  <div>
+                    <p className="text-xs text-gray-500">Time</p>
+                    <p className="font-bold text-sm text-green-600">
+                      {Math.round(routeInfo.duration)} min
                     </p>
                   </div>
                 </div>

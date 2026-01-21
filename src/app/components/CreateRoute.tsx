@@ -1,7 +1,6 @@
-import { useEffect, useRef, useState } from "react";
+﻿import { useEffect, useRef, useState } from "react";
 import mapboxgl from "mapbox-gl";
 import { Button } from "./ui/button";
-import { Badge } from "./ui/badge";
 import {
   Car,
   Users,
@@ -17,12 +16,17 @@ import {
   ZoomOut,
   Maximize2,
   Calendar,
+  RefreshCw,
+  Download,
+  Loader2,
 } from "lucide-react";
 import { driversService, passengersService } from "../../api/services";
 import { RouteParticipant, SavedRoute, RouteInfo } from "../../types/route";
 import { ShiftDriver, ShiftPassenger } from "../../types/transport";
 import { useAppDispatch, useAppSelector } from "../../store/hooks";
 import { setGoingDate, setGoingShift } from "../../store/slices/filterSlice";
+import { saveRouteData } from "../../store/slices/dataSlice";
+import { SHIFT_TYPES, normalizeShift } from "../../constants/shifts";
 
 interface Location {
   id: string;
@@ -157,7 +161,9 @@ const convertPassengersToLocations = (
 
 export function CreateRoute({ savedRoutes, onSaveRoute }: CreateRouteProps) {
   const dispatch = useAppDispatch();
-  const { selectedDate, selectedShift } = useAppSelector((state) => state.filters.going);
+  const { selectedDate, selectedShift } = useAppSelector(
+    (state) => state.filters.going
+  );
 
   const goingRoutes = savedRoutes.filter(
     (route) => route.routeType === "going"
@@ -193,6 +199,7 @@ export function CreateRoute({ savedRoutes, onSaveRoute }: CreateRouteProps) {
     useState<string>("All");
   const [timeFilter, setTimeFilter] = useState<string[]>([]); // Passenger time filter
   const [driverTimeFilter, setDriverTimeFilter] = useState<string[]>([]); // Driver time filter
+  const [checkedDrivers, setCheckedDrivers] = useState<string[]>([]); // Drivers visible on map
 
   const [showTimeDropdown, setShowTimeDropdown] = useState(false);
   const [showDriverTimeDropdown, setShowDriverTimeDropdown] = useState(false);
@@ -200,7 +207,7 @@ export function CreateRoute({ savedRoutes, onSaveRoute }: CreateRouteProps) {
   // Bottom panel state
   const [showBottomPanel, setShowBottomPanel] = useState(false);
 
-  const shifts = ["Morning", "Afternoon", "Evening", "Night"];
+  const shifts = SHIFT_TYPES;
 
   const routeColors = [
     { primary: "#3b82f6", name: "Blue" },
@@ -209,75 +216,43 @@ export function CreateRoute({ savedRoutes, onSaveRoute }: CreateRouteProps) {
     { primary: "#f59e0b", name: "Orange" },
     { primary: "#10b981", name: "Green" },
   ];
+  const routeType: "going" = "going";
+  const routeTypeLabel = routeType.charAt(0).toUpperCase() + routeType.slice(1);
+  const normalizedShift = normalizeShift(selectedShift);
+  const savedRouteData = useAppSelector(
+    (state) => state.data.byDate[selectedDate]?.going?.[normalizedShift]
+  );
+  const formatLastFetched = (timestamp?: string | null) => {
+    if (!timestamp) return null;
+    const date = new Date(timestamp);
+    if (Number.isNaN(date.getTime())) return null;
+    return date.toLocaleString([], {
+      hour: "numeric",
+      minute: "numeric",
+      hour12: true,
+      month: "short",
+      day: "numeric",
+    });
+  };
+  const lastFetchedLabel = formatLastFetched(savedRouteData?.lastFetched);
 
   useEffect(() => {
-    let cancelled = false;
-    const loadDrivers = async () => {
-      try {
-        setDriversLoading(true);
-        setDriversError(null);
-        const formattedDate = formatDateForApi(selectedDate);
-        const shift = selectedShift.toLowerCase();
-        const data = await driversService.getDriversByShift(
-          formattedDate,
-          "going",
-          shift
-        );
-        if (!cancelled) {
-          setDriversData(Array.isArray(data) ? (data as ShiftDriver[]) : []);
-        }
-      } catch (error: any) {
-        if (!cancelled) {
-          setDriversError(error?.message || "Failed to load drivers");
-          setDriversData([]);
-        }
-      } finally {
-        if (!cancelled) {
-          setDriversLoading(false);
-        }
-      }
-    };
+    const hasReduxData =
+      (savedRouteData?.drivers.length ?? 0) > 0 ||
+      (savedRouteData?.passengers.length ?? 0) > 0;
 
-    loadDrivers();
-    return () => {
-      cancelled = true;
-    };
-  }, [selectedDate, selectedShift]);
+    if (hasReduxData && savedRouteData) {
+      setDriversData(savedRouteData.drivers);
+      setPassengersData(savedRouteData.passengers);
+    } else {
+      setDriversData([]);
+      setPassengersData([]);
+    }
 
-  useEffect(() => {
-    let cancelled = false;
-    const loadPassengers = async () => {
-      try {
-        setPassengersLoading(true);
-        setPassengersError(null);
-        const shift = selectedShift.toLowerCase();
-        const data = await passengersService.getPassengersByShiftDateRoute(
-          selectedDate,
-          "going",
-          shift
-        );
-        if (!cancelled) {
-          setPassengersData(
-            Array.isArray(data) ? (data as ShiftPassenger[]) : []
-          );
-        }
-      } catch (error: any) {
-        if (!cancelled) {
-          setPassengersError(error?.message || "Failed to load passengers");
-          setPassengersData([]);
-        }
-      } finally {
-        if (!cancelled) {
-          setPassengersLoading(false);
-        }
-      }
-    };
-
-    loadPassengers();
-    return () => {
-      cancelled = true;
-    };
-  }, [selectedDate, selectedShift]);
+    setDriversError(null);
+    setPassengersError(null);
+    setCheckedDrivers([]);
+  }, [normalizedShift, selectedDate, savedRouteData]);
 
   // Get drivers for selected shift
   const drivers = convertRidersToLocations(driversData, selectedShift);
@@ -287,6 +262,10 @@ export function CreateRoute({ savedRoutes, onSaveRoute }: CreateRouteProps) {
     passengersData,
     selectedShift
   );
+
+  const displayDriverCount = savedRouteData?.drivers.length ?? drivers.length;
+  const displayPassengerCount =
+    savedRouteData?.passengers.length ?? passengers.length;
 
   // Filter out drivers and passengers that are already used in saved GOING routes only
   // const usedDriverIds = new Set(
@@ -459,6 +438,7 @@ export function CreateRoute({ savedRoutes, onSaveRoute }: CreateRouteProps) {
     driverTimeFilter,
     passengerSearch,
     driverSearch,
+    checkedDrivers,
   ]);
 
   const updateMarkersAndRoute = () => {
@@ -467,8 +447,13 @@ export function CreateRoute({ savedRoutes, onSaveRoute }: CreateRouteProps) {
     markersRef.current.forEach((marker) => marker.remove());
     markersRef.current = [];
 
-    // Add driver markers based on filter (use filteredDrivers instead of availableDrivers)
-    filteredDrivers.forEach((driver) => {
+    // Add driver markers based on filter and checkbox selection
+    const driversToShow =
+      checkedDrivers.length > 0
+        ? filteredDrivers.filter((d) => checkedDrivers.includes(d.id))
+        : filteredDrivers;
+
+    driversToShow.forEach((driver) => {
       const isSelected = driver.id === selectedDriver;
       const el = document.createElement("div");
       el.style.width = isSelected ? "40px" : "32px";
@@ -506,18 +491,15 @@ export function CreateRoute({ savedRoutes, onSaveRoute }: CreateRouteProps) {
                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="white"><path d="M18.92 6.01C18.72 5.42 18.16 5 17.5 5h-11c-.66 0-1.21.42-1.42 1.01L3 12v8c0 .55.45 1 1 1h1c.55 0 1-.45 1-1v-1h12v1c0 .55.45 1 1 1h1c.55 0 1-.45 1-1v-8l-2.08-5.99zM6.5 16c-.83 0-1.5-.67-1.5-1.5S5.67 13 6.5 13s1.5.67 1.5 1.5S7.33 16 6.5 16zm11 0c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zM5 11l1.5-4.5h11L19 11H5z"/></svg>
               </div>
               <div>
-                <strong class="block">${driver.name}</strong>
+                <strong class="block">${driver.name}, ${driver.id}</strong>
                 <span class="text-xs ${
                   isSelected ? "text-blue-600 font-bold" : "text-blue-600"
-                }">${isSelected ? "SELECTED DRIVER" : "DRIVER"}</span>
+                }">${isSelected ? "SELECTED DRIVER" : "DRIVER"}, ${
+        driver.time
+      }</span>
               </div>
             </div>
-            <p class="text-xs text-gray-600 mb-1"><strong>Driver id:</strong> ${
-              driver.id
-            }</p>
-            <p class="text-xs text-gray-600 mb-1"><strong>Time:</strong> ${
-              driver.time
-            }</p>
+    
             <p class="text-xs text-gray-600 mb-1"><strong>Location:</strong> ${
               driver.subPoint
             }</p>
@@ -553,26 +535,54 @@ export function CreateRoute({ savedRoutes, onSaveRoute }: CreateRouteProps) {
     filteredPassengers.forEach((passenger) => {
       const isSelected = selectedPassengers.includes(passenger.id);
 
-      // Add pickup marker (green)
+      // Add pickup marker (green) with time label
       const el = document.createElement("div");
-      el.style.width = isSelected ? "32px" : "24px";
-      el.style.height = isSelected ? "32px" : "24px";
-      el.style.borderRadius = "50%";
-      el.style.backgroundColor = isSelected ? "#10b981" : "#86efac";
-      el.style.border = isSelected ? "3px solid white" : "2px solid white";
-      el.style.boxShadow = isSelected
-        ? "0 4px 8px rgba(0,0,0,0.3)"
-        : "0 2px 4px rgba(0,0,0,0.2)";
       el.style.display = "flex";
+      el.style.flexDirection = "column";
       el.style.alignItems = "center";
-      el.style.justifyContent = "center";
       el.style.cursor = "pointer";
       el.style.transition = "all 0.2s";
-      el.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="${
+
+      // Format time for display (show only HH:MM)
+      const displayTime = passenger.time ? passenger.time.slice(0, 5) : "";
+
+      el.innerHTML = `
+        <div style="
+          width: ${isSelected ? "32px" : "24px"};
+          height: ${isSelected ? "32px" : "24px"};
+          border-radius: 50%;
+          background-color: ${isSelected ? "#10b981" : "#86efac"};
+          border: ${isSelected ? "3px solid white" : "2px solid white"};
+          box-shadow: ${
+            isSelected
+              ? "0 4px 8px rgba(0,0,0,0.3)"
+              : "0 2px 4px rgba(0,0,0,0.2)"
+          };
+          display: flex;
+          align-items: center;
+          justify-content: center;
+        ">
+          <svg xmlns="http://www.w3.org/2000/svg" width="${
+            isSelected ? "16" : "12"
+          }" height="${
         isSelected ? "16" : "12"
-      }" height="${
-        isSelected ? "16" : "12"
-      }" viewBox="0 0 24 24" fill="white"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>`;
+      }" viewBox="0 0 24 24" fill="white"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>
+        </div>
+        ${
+          displayTime
+            ? `<div style="
+          background-color: #036ffc;
+          color: white;
+          font-size: 9px;
+          font-weight: 600;
+          padding: 2px 5px;
+          border-radius: 4px;
+          margin-top: 2px;
+          white-space: nowrap;
+          box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+        ">${displayTime}</div>`
+            : ""
+        }`;
 
       // Click handler to toggle passenger selection
       el.addEventListener("click", () => {
@@ -590,18 +600,17 @@ export function CreateRoute({ savedRoutes, onSaveRoute }: CreateRouteProps) {
                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="white"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>
               </div>
               <div>
-                <strong class="block">${passenger.name}</strong>
+                <strong class="block">${passenger.name}, ${
+        passenger.id
+      }</strong>
                 <span class="text-xs ${
                   isSelected ? "text-green-600 font-bold" : "text-green-600"
-                }">${isSelected ? "SELECTED PICKUP" : "PICKUP"}</span>
+                }">${isSelected ? "SELECTED PICKUP" : "PICKUP"}, ${
+        passenger.time
+      }</span>
               </div>
             </div>
-            <p class="text-xs text-gray-600 mb-1"><strong>Passenger id:</strong> ${
-              passenger.id
-            }</p>
-            <p class="text-xs text-gray-600 mb-1"><strong>Time :</strong> ${
-              passenger.time
-            }</p>
+        
             <p class="text-xs text-gray-600 mb-1"><strong>Location:</strong> ${
               passenger.subPoint
             }</p>
@@ -865,8 +874,8 @@ export function CreateRoute({ savedRoutes, onSaveRoute }: CreateRouteProps) {
     if (markersRef.current.length > 0) {
       const bounds = new mapboxgl.LngLatBounds();
 
-      // Add filtered driver coordinates (not all available drivers)
-      filteredDrivers.forEach((driver) => bounds.extend(driver.coordinates));
+      // Add checked/filtered driver coordinates
+      driversToShow.forEach((driver) => bounds.extend(driver.coordinates));
 
       // Add all filtered passenger pickup coordinates
       filteredPassengers.forEach((passenger) =>
@@ -1127,6 +1136,51 @@ export function CreateRoute({ savedRoutes, onSaveRoute }: CreateRouteProps) {
     setShowBottomPanel(false);
   };
 
+  const fetchRouteParticipants = async () => {
+    const requestDate = selectedDate;
+    const requestShift = normalizedShift;
+    const isStaleRequest = () =>
+      requestDate !== selectedDate ||
+      requestShift !== normalizeShift(selectedShift);
+    try {
+      setDriversLoading(true);
+      setPassengersLoading(true);
+      setDriversError(null);
+      setPassengersError(null);
+
+      const formattedDate = formatDateForApi(requestDate);
+      const shift = requestShift.toLowerCase();
+
+      const [driversResult, passengersResult] = await Promise.all([
+        driversService.getDriversByShift(formattedDate, routeType, shift),
+        passengersService.getPassengersByShiftDateRoute(
+          requestDate,
+          routeType,
+          shift
+        ),
+      ]);
+
+      if (isStaleRequest()) {
+        return;
+      }
+
+      setDriversData(Array.isArray(driversResult) ? driversResult : []);
+      setPassengersData(
+        Array.isArray(passengersResult) ? passengersResult : []
+      );
+    } catch (error: any) {
+      if (isStaleRequest()) {
+        return;
+      }
+      const message = error?.message || "Failed to fetch data";
+      setDriversError(message);
+      setPassengersError(message);
+    } finally {
+      setDriversLoading(false);
+      setPassengersLoading(false);
+    }
+  };
+
   const changeRouteColor = () => {
     const nextIndex = (routeColorIndex + 1) % routeColors.length;
     setRouteColorIndex(nextIndex);
@@ -1198,116 +1252,156 @@ export function CreateRoute({ savedRoutes, onSaveRoute }: CreateRouteProps) {
     <div className="h-full flex flex-col">
       {/* Top Navigation Bar */}
       <div className="bg-white border-b shadow-sm z-30 relative">
-        <div className="flex items-center gap-3 px-4 py-3">
-          {/* Date Selector */}
-          <div className="relative dropdown-container">
-            <button
-              onClick={() => {
-                setShowDateDropdown(!showDateDropdown);
-                setShowShiftDropdown(false);
-                setShowDriverDropdown(false);
-                setShowPassengerDropdown(false);
-              }}
-              className="flex items-center gap-2 px-4 py-2 bg-white border rounded-lg hover:bg-gray-50 transition-colors min-w-[160px]"
-            >
-              <Calendar className="w-4 h-4 text-gray-600" />
-              <span className="font-medium text-sm">{selectedDate}</span>
-              <ChevronDown className="w-4 h-4 text-gray-400" />
-            </button>
+        <div className="flex flex-wrap items-center gap-6 px-4 py-3">
+          <div className="flex items-center gap-3">
+            {/* Date Selector */}
+            <div className="relative dropdown-container">
+              <button
+                onClick={() => {
+                  setShowDateDropdown(!showDateDropdown);
+                  setShowShiftDropdown(false);
+                  setShowDriverDropdown(false);
+                  setShowPassengerDropdown(false);
+                }}
+                className="flex items-center gap-2 px-4 py-2 bg-white border rounded-lg hover:bg-gray-50 transition-colors min-w-[160px]"
+              >
+                <Calendar className="w-4 h-4 text-gray-600" />
+                <span className="font-medium text-sm">{selectedDate}</span>
+                <ChevronDown className="w-4 h-4 text-gray-400" />
+              </button>
 
-            {showDateDropdown && (
-              <div className="absolute top-full mt-1 bg-white border rounded-lg shadow-lg w-72 p-4 z-30">
-                <div className="mb-3">
-                  <label className="block text-xs font-medium text-gray-700 mb-2">
-                    Select Date
-                  </label>
-                  <input
-                    type="date"
-                    value={selectedDate}
-                    onChange={(e) => {
-                      dispatch(setGoingDate(e.target.value));
-                      setShowDateDropdown(false);
-                      clearSelections();
-                    }}
-                    className="w-full px-3 py-2 text-sm border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
-                </div>
-                <div className="pt-3 border-t">
-                  <div className="grid grid-cols-2 gap-2">
-                    <button
-                      onClick={() => {
-                        dispatch(setGoingDate(new Date().toISOString().split("T")[0]));
+              {showDateDropdown && (
+                <div className="absolute top-full mt-1 bg-white border rounded-lg shadow-lg w-72 p-4 z-30">
+                  <div className="mb-3">
+                    <label className="block text-xs font-medium text-gray-700 mb-2">
+                      Select Date
+                    </label>
+                    <input
+                      type="date"
+                      value={selectedDate}
+                      onChange={(e) => {
+                        dispatch(setGoingDate(e.target.value));
                         setShowDateDropdown(false);
                         clearSelections();
                       }}
-                      className={`px-3 py-2 text-xs rounded-lg transition-colors ${
-                        selectedDate === new Date().toISOString().split("T")[0]
-                          ? "bg-blue-600 text-white"
-                          : "bg-blue-50 text-blue-600 hover:bg-blue-100"
-                      }`}
-                    >
-                      Today
-                    </button>
-                    <button
-                      onClick={() => {
-                        const tomorrow = new Date();
-                        tomorrow.setDate(tomorrow.getDate() + 1);
-                        dispatch(setGoingDate(tomorrow.toISOString().split("T")[0]));
-                        setShowDateDropdown(false);
-                        clearSelections();
-                      }}
-                      className={`px-3 py-2 text-xs rounded-lg transition-colors ${
-                        selectedDate === (() => {
-                          const t = new Date();
-                          t.setDate(t.getDate() + 1);
-                          return t.toISOString().split("T")[0];
-                        })()
-                          ? "bg-blue-600 text-white"
-                          : "bg-gray-50 text-gray-600 hover:bg-gray-100"
-                      }`}
-                    >
-                      Tomorrow
-                    </button>
+                      className="w-full px-3 py-2 text-sm border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+                  <div className="pt-3 border-t">
+                    <div className="grid grid-cols-2 gap-2">
+                      <button
+                        onClick={() => {
+                          dispatch(
+                            setGoingDate(new Date().toISOString().split("T")[0])
+                          );
+                          setShowDateDropdown(false);
+                          clearSelections();
+                        }}
+                        className={`px-3 py-2 text-xs rounded-lg transition-colors ${
+                          selectedDate ===
+                          new Date().toISOString().split("T")[0]
+                            ? "bg-blue-600 text-white"
+                            : "bg-blue-50 text-blue-600 hover:bg-blue-100"
+                        }`}
+                      >
+                        Today
+                      </button>
+                      <button
+                        onClick={() => {
+                          const tomorrow = new Date();
+                          tomorrow.setDate(tomorrow.getDate() + 1);
+                          dispatch(
+                            setGoingDate(tomorrow.toISOString().split("T")[0])
+                          );
+                          setShowDateDropdown(false);
+                          clearSelections();
+                        }}
+                        className={`px-3 py-2 text-xs rounded-lg transition-colors ${
+                          selectedDate ===
+                          (() => {
+                            const t = new Date();
+                            t.setDate(t.getDate() + 1);
+                            return t.toISOString().split("T")[0];
+                          })()
+                            ? "bg-blue-600 text-white"
+                            : "bg-gray-50 text-gray-600 hover:bg-gray-100"
+                        }`}
+                      >
+                        Tomorrow
+                      </button>
+                    </div>
                   </div>
                 </div>
+              )}
+            </div>
+            <div className="w-px h-8 bg-gray-200"></div>
+            {/* Shift Selector */}
+            <div className="relative dropdown-container">
+              <button
+                onClick={() => {
+                  setShowShiftDropdown(!showShiftDropdown);
+                  setShowDriverDropdown(false);
+                  setShowPassengerDropdown(false);
+                }}
+                className="flex items-center gap-2 px-4 py-2 bg-white border rounded-lg hover:bg-gray-50 transition-colors min-w-[140px]"
+              >
+                <Clock className="w-4 h-4 text-gray-600" />
+                <span className="font-medium text-sm">{selectedShift}</span>
+                <ChevronDown className="w-4 h-4 text-gray-400" />
+              </button>
+
+              {showShiftDropdown && (
+                <div className="absolute top-full mt-1 bg-white border rounded-lg shadow-lg w-48 py-1 z-30">
+                  {shifts.map((shift) => (
+                    <button
+                      key={shift}
+                      onClick={() => {
+                        dispatch(setGoingShift(shift));
+                        setShowShiftDropdown(false);
+                        clearSelections();
+                      }}
+                      className={`w-full px-4 py-2 text-left text-sm hover:bg-gray-50 transition-colors ${
+                        selectedShift === shift
+                          ? "bg-blue-50 text-blue-600 font-medium"
+                          : ""
+                      }`}
+                    >
+                      {shift}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div className="flex items-center gap-4 text-xs text-gray-500 whitespace-nowrap">
+            <div className="flex items-center gap-1">
+              <Car className="w-3 h-3 text-blue-600" />
+              <span className="font-semibold text-gray-600">
+                {displayDriverCount} driver
+                {displayDriverCount === 1 ? "" : "s"}
+              </span>
+            </div>
+            <div className="flex items-center gap-1">
+              <Users className="w-3 h-3 text-green-600" />
+              <span className="font-semibold text-gray-600">
+                {displayPassengerCount} passenger
+                {displayPassengerCount === 1 ? "" : "s"}
+              </span>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-3 text-xs text-gray-500">
+            {(driversLoading || passengersLoading) && (
+              <div className="flex items-center gap-1 text-blue-600">
+                <Loader2 className="w-3 h-3 animate-spin text-blue-600" />
+                <span>Loading drivers & passengers...</span>
               </div>
             )}
-          </div>
-          {/* Shift Selector */}
-          <div className="relative dropdown-container">
-            <button
-              onClick={() => {
-                setShowShiftDropdown(!showShiftDropdown);
-                setShowDriverDropdown(false);
-                setShowPassengerDropdown(false);
-              }}
-              className="flex items-center gap-2 px-4 py-2 bg-white border rounded-lg hover:bg-gray-50 transition-colors min-w-[140px]"
-            >
-              <Clock className="w-4 h-4 text-gray-600" />
-              <span className="font-medium text-sm">{selectedShift}</span>
-              <ChevronDown className="w-4 h-4 text-gray-400" />
-            </button>
-
-            {showShiftDropdown && (
-              <div className="absolute top-full mt-1 bg-white border rounded-lg shadow-lg w-48 py-1 z-30">
-                {shifts.map((shift) => (
-                  <button
-                    key={shift}
-                    onClick={() => {
-                      dispatch(setGoingShift(shift));
-                      setShowShiftDropdown(false);
-                      clearSelections();
-                    }}
-                    className={`w-full px-4 py-2 text-left text-sm hover:bg-gray-50 transition-colors ${
-                      selectedShift === shift
-                        ? "bg-blue-50 text-blue-600 font-medium"
-                        : ""
-                    }`}
-                  >
-                    {shift}
-                  </button>
-                ))}
-              </div>
+            {lastFetchedLabel && (
+              <span className="px-2 py-1 text-[11px] uppercase tracking-wider text-gray-500">
+                Updated {lastFetchedLabel}
+              </span>
             )}
           </div>
 
@@ -1325,7 +1419,11 @@ export function CreateRoute({ savedRoutes, onSaveRoute }: CreateRouteProps) {
             >
               <Car className="w-4 h-4 text-blue-600" />
               <span className="text-sm flex-1 text-left truncate">
-                {currentDriver ? currentDriver.name : "Select Driver"}
+                {checkedDrivers.length > 0
+                  ? `${checkedDrivers.length} Driver${
+                      checkedDrivers.length > 1 ? "s" : ""
+                    } on Map`
+                  : "Select Drivers"}
               </span>
               <ChevronDown className="w-4 h-4 text-gray-400 flex-shrink-0" />
             </button>
@@ -1433,6 +1531,36 @@ export function CreateRoute({ savedRoutes, onSaveRoute }: CreateRouteProps) {
                       </button>
                     </div>
                   )}
+
+                  {/* Select All / Clear All for map visibility */}
+                  {filteredDrivers.length > 0 && (
+                    <div className="mt-2 flex items-center justify-between">
+                      <p className="text-xs text-gray-500">
+                        {checkedDrivers.length} of {filteredDrivers.length} on
+                        map
+                      </p>
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => {
+                            setCheckedDrivers(filteredDrivers.map((d) => d.id));
+                          }}
+                          className="text-xs text-blue-600 hover:underline"
+                        >
+                          Select all
+                        </button>
+                        {checkedDrivers.length > 0 && (
+                          <button
+                            onClick={() => {
+                              setCheckedDrivers([]);
+                            }}
+                            className="text-xs text-red-600 hover:underline"
+                          >
+                            Clear all
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  )}
                 </div>
                 <div className="max-h-80 overflow-y-auto">
                   {driversLoading ? (
@@ -1449,50 +1577,53 @@ export function CreateRoute({ savedRoutes, onSaveRoute }: CreateRouteProps) {
                     </div>
                   ) : (
                     filteredDrivers.map((driver) => (
-                      <button
+                      <div
                         key={driver.id}
-                        onClick={() => {
-                          setSelectedDriver(driver.id);
-                          setShowDriverDropdown(false);
-                          setDriverSearch("");
-                        }}
-                        className={`w-full px-4 py-3 text-left hover:bg-gray-50 transition-colors border-b last:border-b-0 ${
-                          selectedDriver === driver.id ? "bg-blue-50" : ""
+                        className={`flex items-center gap-3 px-4 py-3 hover:bg-gray-50 border-b last:border-b-0 ${
+                          checkedDrivers.includes(driver.id) ? "bg-blue-50" : ""
                         }`}
                       >
-                        <div className="flex items-center gap-3">
-                          <div
-                            className={`w-10 h-10 rounded-full flex items-center justify-center ${
-                              selectedDriver === driver.id
-                                ? "bg-blue-500"
-                                : "bg-gray-200"
+                        <input
+                          type="checkbox"
+                          checked={checkedDrivers.includes(driver.id)}
+                          onChange={(e) => {
+                            e.stopPropagation();
+                            setCheckedDrivers((prev) =>
+                              prev.includes(driver.id)
+                                ? prev.filter((id) => id !== driver.id)
+                                : [...prev, driver.id]
+                            );
+                          }}
+                          className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500 cursor-pointer"
+                        />
+                        <div
+                          className={`w-10 h-10 rounded-full flex items-center justify-center ${
+                            checkedDrivers.includes(driver.id)
+                              ? "bg-blue-500"
+                              : "bg-gray-200"
+                          }`}
+                        >
+                          <Car
+                            className={`w-5 h-5 ${
+                              checkedDrivers.includes(driver.id)
+                                ? "text-white"
+                                : "text-gray-600"
                             }`}
-                          >
-                            <Car
-                              className={`w-5 h-5 ${
-                                selectedDriver === driver.id
-                                  ? "text-white"
-                                  : "text-gray-600"
-                              }`}
-                            />
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <p className="font-medium text-sm truncate">
-                              {driver.name}
-                            </p>
-                            <div className="flex items-center gap-2 text-xs text-gray-500">
-                              <MapPin className="w-3 h-3" />
-                              <span>{driver.subPoint}</span>
-                              <span>•</span>
-                              <Phone className="w-3 h-3" />
-                              <span>{driver.phone}</span>
-                            </div>
-                          </div>
-                          {selectedDriver === driver.id && (
-                            <Badge className="bg-blue-500">Selected</Badge>
-                          )}
+                          />
                         </div>
-                      </button>
+                        <div className="flex-1 min-w-0">
+                          <p className="font-medium text-sm truncate">
+                            {driver.name}
+                          </p>
+                          <div className="flex items-center gap-2 text-xs text-gray-500">
+                            <MapPin className="w-3 h-3" />
+                            <span>{driver.subPoint}</span>
+                            <span>•</span>
+                            <Phone className="w-3 h-3" />
+                            <span>{driver.phone}</span>
+                          </div>
+                        </div>
+                      </div>
                     ))
                   )}
                 </div>
@@ -1730,35 +1861,50 @@ export function CreateRoute({ savedRoutes, onSaveRoute }: CreateRouteProps) {
             )}
           </div>
 
-          {/* Route Info Display */}
-          {routeInfo && (
-            <>
-              <div className="w-px h-8 bg-gray-200"></div>
-              <div className="flex items-center gap-4">
-                <div className="flex items-center gap-2">
-                  <Navigation className="w-4 h-4 text-blue-600" />
-                  <div>
-                    <p className="text-xs text-gray-500">Distance</p>
-                    <p className="font-bold text-sm text-blue-600">
-                      {routeInfo.distance.toFixed(1)} km
-                    </p>
-                  </div>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Clock className="w-4 h-4 text-green-600" />
-                  <div>
-                    <p className="text-xs text-gray-500">Time</p>
-                    <p className="font-bold text-sm text-green-600">
-                      {Math.round(routeInfo.duration)} min
-                    </p>
-                  </div>
-                </div>
-              </div>
-            </>
-          )}
-
           {/* Actions */}
           <div className="ml-auto flex items-center gap-2">
+            {/* Fetch Data Button */}
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={fetchRouteParticipants}
+              disabled={driversLoading || passengersLoading}
+              className="h-9"
+            >
+              <RefreshCw
+                className={`w-4 h-4 mr-1 ${
+                  driversLoading || passengersLoading ? "animate-spin" : ""
+                }`}
+              />
+              {driversLoading || passengersLoading
+                ? "Fetching..."
+                : "Fetch Data"}
+            </Button>
+
+            {/* Save Data Button */}
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                // Save data to Redux store
+                dispatch(
+                  saveRouteData({
+                    routeType: "going",
+                    shift: normalizedShift,
+                    date: selectedDate,
+                    drivers: driversData,
+                    passengers: passengersData,
+                  })
+                );
+                alert(`Data saved for ${selectedShift} shift (Going route)`);
+              }}
+              disabled={driversData.length === 0 && passengersData.length === 0}
+              className="h-9"
+            >
+              <Download className="w-4 h-4 mr-1" />
+              Save Data
+            </Button>
+
             {/* Map Navigation Controls */}
             <div className="flex items-center gap-1 border rounded-lg overflow-hidden">
               <button
@@ -1805,6 +1951,15 @@ export function CreateRoute({ savedRoutes, onSaveRoute }: CreateRouteProps) {
           style={{ minHeight: "400px" }}
         />
 
+        {(driversLoading || passengersLoading) && (
+          <div className="absolute inset-0 z-10 flex flex-col items-center justify-center bg-white/80 backdrop-blur">
+            <Loader2 className="w-8 h-8 mb-2 animate-spin text-blue-600" />
+            <p className="text-sm font-semibold text-blue-700">
+              Fetching drivers & passengers
+            </p>
+          </div>
+        )}
+
         {!selectedDriver && selectedPassengers.length === 0 && (
           <div className="absolute top-6 left-1/2 -translate-x-1/2 bg-white px-6 py-3 rounded-lg shadow-lg z-10 border">
             <p className="text-sm text-gray-600 flex items-center gap-2">
@@ -1848,6 +2003,30 @@ export function CreateRoute({ savedRoutes, onSaveRoute }: CreateRouteProps) {
                   </div>
                 </div>
 
+                <div className="w-px h-10 bg-gray-200"></div>
+
+                <div className="flex items-center gap-2">
+                  <Navigation className="w-5 h-5 text-blue-600" />
+                  <div>
+                    <p className="text-xs text-gray-500">Distance</p>
+                    <p className="font-bold text-sm text-blue-600">
+                      {routeInfo.distance.toFixed(1)} km
+                    </p>
+                  </div>
+                </div>
+
+                <div className="w-px h-10 bg-gray-200"></div>
+
+                <div className="flex items-center gap-2">
+                  <Clock className="w-5 h-5 text-green-600" />
+                  <div>
+                    <p className="text-xs text-gray-500">Time</p>
+                    <p className="font-bold text-sm text-green-600">
+                      {Math.round(routeInfo.duration)} min
+                    </p>
+                  </div>
+                </div>
+
                 {distanceSaved > 0 && (
                   <>
                     <div className="w-px h-10 bg-gray-200"></div>
@@ -1856,7 +2035,7 @@ export function CreateRoute({ savedRoutes, onSaveRoute }: CreateRouteProps) {
                       <Navigation className="w-5 h-5 text-green-600" />
                       <div>
                         <p className="text-xs text-green-600 font-medium">
-                          ✓ Route Optimized
+                          Route Optimized
                         </p>
                         <p className="font-bold text-sm text-green-700">
                           {distanceSaved.toFixed(1)} km saved
