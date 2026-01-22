@@ -24,7 +24,7 @@ import { driversService, passengersService } from "../../api/services";
 import { RouteParticipant, SavedRoute, RouteInfo } from "../../types/route";
 import { ShiftDriver, ShiftPassenger } from "../../types/transport";
 import { useAppDispatch, useAppSelector } from "../../store/hooks";
-import { setGoingDate, setGoingShift } from "../../store/slices/filterSlice";
+import { setGoingDate, setGoingShift, setGoingDriver, setGoingPassengers } from "../../store/slices/filterSlice";
 import { saveRouteData } from "../../store/slices/dataSlice";
 import { SHIFT_TYPES, normalizeShift } from "../../constants/shifts";
 
@@ -92,6 +92,7 @@ const toParticipantSnapshot = (location: Location): RouteParticipant => ({
   phone: location.phone,
   address: location.address,
   subPoint: location.subPoint,
+  time: location.time,
   coordinates: location.coordinates,
   destinationCoordinates: location.destinationCoordinates,
   destination: location.destination,
@@ -161,9 +162,17 @@ const convertPassengersToLocations = (
 
 export function CreateRoute({ savedRoutes, onSaveRoute }: CreateRouteProps) {
   const dispatch = useAppDispatch();
-  const { selectedDate, selectedShift } = useAppSelector(
+  const { selectedDate, selectedShift, selectedDriver, selectedPassengers } = useAppSelector(
     (state) => state.filters.going
   );
+
+  const setSelectedDriver = (driver: string | null) => {
+    dispatch(setGoingDriver(driver));
+  };
+
+  const setSelectedPassengers = (passengers: string[]) => {
+    dispatch(setGoingPassengers(passengers));
+  };
 
   const goingRoutes = savedRoutes.filter(
     (route) => route.routeType === "going"
@@ -171,9 +180,6 @@ export function CreateRoute({ savedRoutes, onSaveRoute }: CreateRouteProps) {
   const mapContainer = useRef<HTMLDivElement>(null);
   const map = useRef<mapboxgl.Map | null>(null);
   const markersRef = useRef<mapboxgl.Marker[]>([]);
-
-  const [selectedDriver, setSelectedDriver] = useState<string | null>(null);
-  const [selectedPassengers, setSelectedPassengers] = useState<string[]>([]);
   const [routeInfo, setRouteInfo] = useState<RouteInfo | null>(null);
   const [isCalculating, setIsCalculating] = useState(false);
   const [routeColorIndex, setRouteColorIndex] = useState(0);
@@ -551,7 +557,7 @@ export function CreateRoute({ savedRoutes, onSaveRoute }: CreateRouteProps) {
           width: ${isSelected ? "32px" : "24px"};
           height: ${isSelected ? "32px" : "24px"};
           border-radius: 50%;
-          background-color: ${isSelected ? "#10b981" : "#86efac"};
+          background-color: ${isSelected ? "#3b82f5" : "#629dfc"};
           border: ${isSelected ? "3px solid white" : "2px solid white"};
           box-shadow: ${
             isSelected
@@ -1122,11 +1128,10 @@ export function CreateRoute({ savedRoutes, onSaveRoute }: CreateRouteProps) {
   };
 
   const togglePassenger = (passengerId: string) => {
-    setSelectedPassengers((prev) =>
-      prev.includes(passengerId)
-        ? prev.filter((id) => id !== passengerId)
-        : [...prev, passengerId]
-    );
+    const newPassengers = selectedPassengers.includes(passengerId)
+      ? selectedPassengers.filter((id) => id !== passengerId)
+      : [...selectedPassengers, passengerId];
+    setSelectedPassengers(newPassengers);
   };
 
   const clearSelections = () => {
@@ -1252,8 +1257,8 @@ export function CreateRoute({ savedRoutes, onSaveRoute }: CreateRouteProps) {
     <div className="h-full flex flex-col">
       {/* Top Navigation Bar */}
       <div className="bg-white border-b shadow-sm z-30 relative">
-        <div className="flex flex-wrap items-center gap-6 px-4 py-3">
-          <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-2 sm:gap-4 px-2 sm:px-4 py-2">
+          <div className="flex items-center gap-2">
             {/* Date Selector */}
             <div className="relative dropdown-container">
               <button
@@ -1263,11 +1268,11 @@ export function CreateRoute({ savedRoutes, onSaveRoute }: CreateRouteProps) {
                   setShowDriverDropdown(false);
                   setShowPassengerDropdown(false);
                 }}
-                className="flex items-center gap-2 px-4 py-2 bg-white border rounded-lg hover:bg-gray-50 transition-colors min-w-[160px]"
+                className="flex items-center gap-1 sm:gap-2 px-2 sm:px-3 py-1.5 sm:py-2 bg-white border rounded-lg hover:bg-gray-50 transition-colors text-xs sm:text-sm"
               >
-                <Calendar className="w-4 h-4 text-gray-600" />
-                <span className="font-medium text-sm">{selectedDate}</span>
-                <ChevronDown className="w-4 h-4 text-gray-400" />
+                <Calendar className="w-3 h-3 sm:w-4 sm:h-4 text-gray-600" />
+                <span className="font-medium">{selectedDate}</span>
+                <ChevronDown className="w-3 h-3 sm:w-4 sm:h-4 text-gray-400" />
               </button>
 
               {showDateDropdown && (
@@ -1334,7 +1339,6 @@ export function CreateRoute({ savedRoutes, onSaveRoute }: CreateRouteProps) {
                 </div>
               )}
             </div>
-            <div className="w-px h-8 bg-gray-200"></div>
             {/* Shift Selector */}
             <div className="relative dropdown-container">
               <button
@@ -1343,11 +1347,11 @@ export function CreateRoute({ savedRoutes, onSaveRoute }: CreateRouteProps) {
                   setShowDriverDropdown(false);
                   setShowPassengerDropdown(false);
                 }}
-                className="flex items-center gap-2 px-4 py-2 bg-white border rounded-lg hover:bg-gray-50 transition-colors min-w-[140px]"
+                className="flex items-center gap-1 sm:gap-2 px-2 sm:px-3 py-1.5 sm:py-2 bg-white border rounded-lg hover:bg-gray-50 transition-colors text-xs sm:text-sm"
               >
-                <Clock className="w-4 h-4 text-gray-600" />
-                <span className="font-medium text-sm">{selectedShift}</span>
-                <ChevronDown className="w-4 h-4 text-gray-400" />
+                <Clock className="w-3 h-3 sm:w-4 sm:h-4 text-gray-600" />
+                <span className="font-medium">{selectedShift}</span>
+                <ChevronDown className="w-3 h-3 sm:w-4 sm:h-4 text-gray-400" />
               </button>
 
               {showShiftDropdown && (
@@ -1374,58 +1378,50 @@ export function CreateRoute({ savedRoutes, onSaveRoute }: CreateRouteProps) {
             </div>
           </div>
 
-          <div className="flex items-center gap-4 text-xs text-gray-500 whitespace-nowrap">
-            <div className="flex items-center gap-1">
-              <Car className="w-3 h-3 text-blue-600" />
-              <span className="font-semibold text-gray-600">
-                {displayDriverCount} driver
-                {displayDriverCount === 1 ? "" : "s"}
-              </span>
-            </div>
-            <div className="flex items-center gap-1">
-              <Users className="w-3 h-3 text-green-600" />
-              <span className="font-semibold text-gray-600">
-                {displayPassengerCount} passenger
-                {displayPassengerCount === 1 ? "" : "s"}
-              </span>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-3 text-xs text-gray-500">
-            {(driversLoading || passengersLoading) && (
-              <div className="flex items-center gap-1 text-blue-600">
-                <Loader2 className="w-3 h-3 animate-spin text-blue-600" />
-                <span>Loading drivers & passengers...</span>
-              </div>
-            )}
+          <div className="flex flex-col text-[10px] sm:text-xs text-gray-500">
             {lastFetchedLabel && (
-              <span className="px-2 py-1 text-[11px] uppercase tracking-wider text-gray-500">
+              <span className="text-[9px] sm:text-[10px] uppercase tracking-wider text-gray-400">
                 Updated {lastFetchedLabel}
               </span>
             )}
+            <div className="flex items-center gap-2 sm:gap-3 whitespace-nowrap">
+              <div className="flex items-center gap-1">
+                <Car className="w-3 h-3 text-blue-600" />
+                <span className="font-semibold text-gray-600">
+                  {displayDriverCount}
+                </span>
+              </div>
+              <div className="flex items-center gap-1">
+                <Users className="w-3 h-3 text-green-600" />
+                <span className="font-semibold text-gray-600">
+                  {displayPassengerCount}
+                </span>
+              </div>
+            </div>
           </div>
 
-          <div className="w-px h-8 bg-gray-200"></div>
-
           {/* Driver Selector */}
-          <div className="relative flex-1 max-w-xs dropdown-container">
+          <div className="relative dropdown-container">
             <button
               onClick={() => {
                 setShowDriverDropdown(!showDriverDropdown);
                 setShowShiftDropdown(false);
                 setShowPassengerDropdown(false);
               }}
-              className="flex items-center gap-2 px-4 py-2 bg-white border rounded-lg hover:bg-gray-50 transition-colors w-full"
+              className="flex items-center gap-1 px-2 py-1.5 sm:py-2 bg-white border rounded-lg hover:bg-gray-50 transition-colors text-xs sm:text-sm"
             >
-              <Car className="w-4 h-4 text-blue-600" />
-              <span className="text-sm flex-1 text-left truncate">
+              <Car className="w-4 h-4 text-blue-600 flex-shrink-0" />
+              <span className="flex-1 text-left truncate hidden lg:block">
                 {checkedDrivers.length > 0
                   ? `${checkedDrivers.length} Driver${
                       checkedDrivers.length > 1 ? "s" : ""
-                    } on Map`
-                  : "Select Drivers"}
+                    }`
+                  : "Drivers"}
               </span>
-              <ChevronDown className="w-4 h-4 text-gray-400 flex-shrink-0" />
+              <span className="sm:hidden font-medium text-blue-600">
+                {checkedDrivers.length > 0 ? checkedDrivers.length : ""}
+              </span>
+              <ChevronDown className="w-3 h-3 text-gray-400 flex-shrink-0" />
             </button>
 
             {showDriverDropdown && (
@@ -1632,24 +1628,23 @@ export function CreateRoute({ savedRoutes, onSaveRoute }: CreateRouteProps) {
           </div>
 
           {/* Passenger Selector */}
-          <div className="relative flex-1 max-w-xs dropdown-container">
+          <div className="relative dropdown-container">
             <button
               onClick={() => {
                 setShowPassengerDropdown(!showPassengerDropdown);
                 setShowShiftDropdown(false);
                 setShowDriverDropdown(false);
               }}
-              className="flex items-center gap-2 px-4 py-2 bg-white border rounded-lg hover:bg-gray-50 transition-colors w-full"
+              className="flex items-center gap-1 px-2 py-1.5 sm:py-2 bg-white border rounded-lg hover:bg-gray-50 transition-colors text-xs sm:text-sm"
             >
-              <Users className="w-4 h-4 text-green-600" />
-              <span className="text-sm flex-1 text-left">
-                {selectedPassengers.length > 0
-                  ? `${selectedPassengers.length} Passenger${
-                      selectedPassengers.length > 1 ? "s" : ""
-                    }`
-                  : "Select Passengers"}
+              <Users className="w-4 h-4 text-green-600 flex-shrink-0" />
+              <span className="flex-1 text-left truncate hidden lg:block">
+                Passengers
               </span>
-              <ChevronDown className="w-4 h-4 text-gray-400 flex-shrink-0" />
+              <span className="sm:hidden font-medium text-green-600">
+                {selectedPassengers.length > 0 ? selectedPassengers.length : ""}
+              </span>
+              <ChevronDown className="w-3 h-3 text-gray-400 flex-shrink-0" />
             </button>
 
             {showPassengerDropdown && (
@@ -1862,23 +1857,25 @@ export function CreateRoute({ savedRoutes, onSaveRoute }: CreateRouteProps) {
           </div>
 
           {/* Actions */}
-          <div className="ml-auto flex items-center gap-2">
+          <div className="ml-auto flex items-center gap-1 sm:gap-2">
             {/* Fetch Data Button */}
             <Button
               variant="outline"
               size="sm"
               onClick={fetchRouteParticipants}
               disabled={driversLoading || passengersLoading}
-              className="h-9"
+              className="h-8 sm:h-9 px-2 sm:px-3"
             >
               <RefreshCw
-                className={`w-4 h-4 mr-1 ${
+                className={`w-4 h-4 ${
                   driversLoading || passengersLoading ? "animate-spin" : ""
                 }`}
               />
-              {driversLoading || passengersLoading
-                ? "Fetching..."
-                : "Fetch Data"}
+              <span className="hidden sm:inline ml-1">
+                {driversLoading || passengersLoading
+                  ? "Fetching..."
+                  : "Fetch Data"}
+              </span>
             </Button>
 
             {/* Save Data Button */}
@@ -1899,43 +1896,36 @@ export function CreateRoute({ savedRoutes, onSaveRoute }: CreateRouteProps) {
                 alert(`Data saved for ${selectedShift} shift (Going route)`);
               }}
               disabled={driversData.length === 0 && passengersData.length === 0}
-              className="h-9"
+              className="h-8 sm:h-9 px-2 sm:px-3"
             >
-              <Download className="w-4 h-4 mr-1" />
-              Save Data
+              <Download className="w-4 h-4" />
+              <span className="hidden sm:inline ml-1">Save Data</span>
             </Button>
 
             {/* Map Navigation Controls */}
-            <div className="flex items-center gap-1 border rounded-lg overflow-hidden">
+            <div className="flex items-center border rounded-lg overflow-hidden">
               <button
                 onClick={handleZoomIn}
-                className="px-3 py-2 bg-white hover:bg-gray-100 transition-colors border-r"
+                className="px-2 sm:px-3 py-1.5 sm:py-2 bg-white hover:bg-gray-100 transition-colors border-r"
                 title="Zoom In"
               >
                 <ZoomIn className="w-4 h-4 text-gray-700" />
               </button>
               <button
                 onClick={handleZoomOut}
-                className="px-3 py-2 bg-white hover:bg-gray-100 transition-colors border-r"
+                className="px-2 sm:px-3 py-1.5 sm:py-2 bg-white hover:bg-gray-100 transition-colors border-r"
                 title="Zoom Out"
               >
                 <ZoomOut className="w-4 h-4 text-gray-700" />
               </button>
               <button
                 onClick={handleResetView}
-                className="px-3 py-2 bg-white hover:bg-gray-100 transition-colors"
+                className="px-2 sm:px-3 py-1.5 sm:py-2 bg-white hover:bg-gray-100 transition-colors"
                 title="Reset View"
               >
                 <Maximize2 className="w-4 h-4 text-gray-700" />
               </button>
             </div>
-
-            {(selectedDriver || selectedPassengers.length > 0) && (
-              <Button size="sm" onClick={clearSelections} className="h-9">
-                <X className="w-4 h-4 mr-1" />
-                Clear
-              </Button>
-            )}
           </div>
         </div>
       </div>
@@ -2064,17 +2054,18 @@ export function CreateRoute({ savedRoutes, onSaveRoute }: CreateRouteProps) {
               </div>
 
               <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={clearSelections}
+                  className="h-9"
+                >
+                  <X className="w-4 h-4 mr-2" />
+                  Clear
+                </Button>
                 <Button onClick={saveRoute} className="h-9">
                   <Save className="w-4 h-4 mr-2" />
                   Save Route
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setShowBottomPanel(false)}
-                  className="h-9"
-                >
-                  <X className="w-4 h-4" />
                 </Button>
               </div>
             </div>

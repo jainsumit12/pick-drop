@@ -10,6 +10,7 @@ export interface RouteParticipant {
   phone: string;
   address: string;
   subPoint: string;
+  time?: string;
   coordinates: [number, number];
   destinationCoordinates?: [number, number];
   destination?: string;

@@ -28,8 +28,11 @@ const routesSlice = createSlice({
     clearAllRoutes: (state) => {
       state.savedRoutes = [];
     },
+    clearRoutesByType: (state, action: PayloadAction<'going' | 'return'>) => {
+      state.savedRoutes = state.savedRoutes.filter(route => route.routeType !== action.payload);
+    },
   },
 });
 
-export const { addRoute, deleteRoute, toggleRouteVisibility, clearAllRoutes } = routesSlice.actions;
+export const { addRoute, deleteRoute, toggleRouteVisibility, clearAllRoutes, clearRoutesByType } = routesSlice.actions;
 export default routesSlice.reducer;

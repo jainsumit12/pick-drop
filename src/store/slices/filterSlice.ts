@@ -3,6 +3,8 @@ import { createSlice, PayloadAction } from '@reduxjs/toolkit';
 interface RouteFilters {
   selectedDate: string;
   selectedShift: string;
+  selectedDriver: string | null;
+  selectedPassengers: string[];
 }
 
 interface FilterState {
@@ -18,10 +20,14 @@ const initialState: FilterState = {
   going: {
     selectedDate: getInitialDate(),
     selectedShift: 'Morning',
+    selectedDriver: null,
+    selectedPassengers: [],
   },
   return: {
     selectedDate: getInitialDate(),
     selectedShift: 'Morning',
+    selectedDriver: null,
+    selectedPassengers: [],
   },
 };
 
@@ -44,16 +50,38 @@ const filterSlice = createSlice({
     resetGoingFilters: (state) => {
       state.going.selectedDate = getInitialDate();
       state.going.selectedShift = 'Morning';
+      state.going.selectedDriver = null;
+      state.going.selectedPassengers = [];
     },
     resetReturnFilters: (state) => {
       state.return.selectedDate = getInitialDate();
       state.return.selectedShift = 'Morning';
+      state.return.selectedDriver = null;
+      state.return.selectedPassengers = [];
     },
     resetAllFilters: (state) => {
       state.going.selectedDate = getInitialDate();
       state.going.selectedShift = 'Morning';
+      state.going.selectedDriver = null;
+      state.going.selectedPassengers = [];
       state.return.selectedDate = getInitialDate();
       state.return.selectedShift = 'Morning';
+      state.return.selectedDriver = null;
+      state.return.selectedPassengers = [];
+    },
+    // Going route selection actions
+    setGoingDriver: (state, action: PayloadAction<string | null>) => {
+      state.going.selectedDriver = action.payload;
+    },
+    setGoingPassengers: (state, action: PayloadAction<string[]>) => {
+      state.going.selectedPassengers = action.payload;
+    },
+    // Return route selection actions
+    setReturnDriver: (state, action: PayloadAction<string | null>) => {
+      state.return.selectedDriver = action.payload;
+    },
+    setReturnPassengers: (state, action: PayloadAction<string[]>) => {
+      state.return.selectedPassengers = action.payload;
     },
   },
 });
@@ -66,5 +94,9 @@ export const {
   resetGoingFilters,
   resetReturnFilters,
   resetAllFilters,
+  setGoingDriver,
+  setGoingPassengers,
+  setReturnDriver,
+  setReturnPassengers,
 } = filterSlice.actions;
 export default filterSlice.reducer;

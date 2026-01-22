@@ -6,7 +6,7 @@ import { ReturnRoute } from './ReturnRoute';
 import { SavedRoutesView } from './SavedRoutesView';
 import { MapboxSettings } from './MapboxSettings';
 import { useAppDispatch, useAppSelector } from '../../store/hooks';
-import { addRoute, deleteRoute, toggleRouteVisibility } from '../../store/slices/routesSlice';
+import { addRoute, deleteRoute, toggleRouteVisibility, clearRoutesByType } from '../../store/slices/routesSlice';
 import { SavedRoute } from '../../types/route';
 
 interface DashboardProps {
@@ -47,6 +47,12 @@ export function Dashboard({ user, onLogout }: DashboardProps) {
 
   const handleToggleVisibility = (routeId: string) => {
     dispatch(toggleRouteVisibility(routeId));
+  };
+
+  const handleClearRoutes = (routeType: 'going' | 'return') => {
+    if (window.confirm(`Are you sure you want to clear all ${routeType} routes?`)) {
+      dispatch(clearRoutesByType(routeType));
+    }
   };
 
   return (
@@ -136,6 +142,7 @@ export function Dashboard({ user, onLogout }: DashboardProps) {
                 savedRoutes={savedRoutes}
                 onDeleteRoute={handleDeleteRoute}
                 onToggleVisibility={handleToggleVisibility}
+                onClearRoutes={handleClearRoutes}
               />
             }
           />

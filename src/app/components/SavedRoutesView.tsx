@@ -16,12 +16,14 @@ import {
   ChevronDown,
   ChevronUp,
   FileDown,
+  MoveLeft,
+  MoveRight,
 } from "lucide-react";
 import goingDriversData from "../../data/going-drivers.json";
 import returnDriversData from "../../data/return-drivers.json";
 import goingPassengersData from "../../data/going-passengers.json";
 import returnPassengersData from "../../data/return-passengers.json";
-import * as XLSX from "xlsx";
+import * as XLSX from "xlsx-js-style";
 import { RouteParticipant, SavedRoute } from "../../types/route";
 import { ShiftDriver, ShiftPassenger } from "../../types/transport";
 
@@ -29,6 +31,7 @@ interface SavedRoutesViewProps {
   savedRoutes: SavedRoute[];
   onDeleteRoute: (routeId: string) => void;
   onToggleVisibility: (routeId: string) => void;
+  onClearRoutes?: (routeType: "going" | "return") => void;
 }
 
 interface Location {
@@ -40,6 +43,7 @@ interface Location {
   address: string;
   subPoint: string;
   shiftTime: string;
+  time?: string;
   destinationCoordinates?: [number, number];
   destination?: string;
   destinationSubPoint?: string;
@@ -72,6 +76,38 @@ const parseCoordinate = (value: number | string | null): number | null => {
   return Number.isFinite(parsed) ? parsed : null;
 };
 
+const normalizeTime = (time: string): string => {
+  const trimmed = (time || "").trim();
+  if (trimmed.length === 0) return "";
+
+  if (!/^\d{1,2}(:\d{1,2})?$/.test(trimmed)) {
+    return trimmed;
+  }
+
+  const [h, m = ""] = trimmed.split(":");
+  const hourNum = Number(h);
+  const hour = Number.isNaN(hourNum) ? h : String(hourNum);
+  const minute = (m || "").padEnd(2, "0").slice(0, 2);
+  return `${hour}:${minute}`;
+};
+
+const formatTimeBadge = (time?: string): string => {
+  if (!time) return "";
+  const displayTime = time.slice(0, 5);
+  if (!displayTime) return "";
+  return `<div style="
+    background-color: #036ffc;
+    color: white;
+    font-size: 9px;
+    font-weight: 600;
+    padding: 2px 5px;
+    border-radius: 4px;
+    margin-top: 2px;
+    white-space: nowrap;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+  ">${displayTime}</div>`;
+};
+
 // Convert rider data to Location format
 const convertRidersToLocations = (riders: ShiftDriver[]): Location[] => {
   return riders.flatMap((rider) => {
@@ -84,7 +120,10 @@ const convertRidersToLocations = (riders: ShiftDriver[]): Location[] => {
 
     return [
       {
-        id: `${rider.SHIFT}-${extractId(rider.DRIVER_NAME, rider.HOME_LOCATION)}`,
+        id: `${rider.SHIFT}-${extractId(
+          rider.DRIVER_NAME,
+          rider.HOME_LOCATION
+        )}`,
         name: extractCleanName(rider.DRIVER_NAME),
         coordinates: [log, lat],
         type: "driver" as const,
@@ -92,6 +131,7 @@ const convertRidersToLocations = (riders: ShiftDriver[]): Location[] => {
         address: rider.HOME_LOCATION,
         subPoint: rider.DRIVER_SUBPOINT || rider.HOME_LOCATION,
         shiftTime: rider.SHIFT,
+        time: normalizeTime(rider.TIME || ""),
       },
     ];
   });
@@ -122,7 +162,10 @@ const convertGoingPassengersToLocations = (
   Object.entries(passengersByShift).forEach(([shift, shiftPassengers]) => {
     shiftPassengers.forEach((passenger, index) => {
       allLocations.push({
-        id: `passenger-${shift}-${passenger.NAME.replace(/\s+/g, "-")}-${index}`,
+        id: `passenger-${shift}-${passenger.NAME.replace(
+          /\s+/g,
+          "-"
+        )}-${index}`,
         name: extractCleanName(passenger.NAME),
         coordinates: [
           parseCoordinate(passenger.PICKUP_LOG)!,
@@ -133,6 +176,7 @@ const convertGoingPassengersToLocations = (
         address: passenger.PICKUP_LOCATION,
         subPoint: passenger.PICKUP_SUBPOINT || passenger.PICKUP_LOCATION,
         shiftTime: passenger.SHIFT,
+        time: normalizeTime(passenger.TIME || ""),
         destinationCoordinates:
           parseCoordinate(passenger.DROP_LOG) !== null &&
           parseCoordinate(passenger.DROP_LAT) !== null
@@ -182,7 +226,10 @@ const convertReturnPassengersToLocations = (
   Object.entries(passengersByShift).forEach(([shift, shiftPassengers]) => {
     shiftPassengers.forEach((passenger, index) => {
       allLocations.push({
-        id: `passenger-${shift}-${passenger.NAME.replace(/\s+/g, "-")}-${index}`,
+        id: `passenger-${shift}-${passenger.NAME.replace(
+          /\s+/g,
+          "-"
+        )}-${index}`,
         name: extractCleanName(passenger.NAME),
         coordinates: [
           parseCoordinate(passenger.PICKUP_LOG)!,
@@ -193,6 +240,7 @@ const convertReturnPassengersToLocations = (
         address: passenger.PICKUP_LOCATION,
         subPoint: passenger.PICKUP_SUBPOINT || passenger.PICKUP_LOCATION,
         shiftTime: passenger.SHIFT,
+        time: normalizeTime(passenger.TIME || ""),
         destinationCoordinates: [
           parseCoordinate(passenger.DROP_LOG)!,
           parseCoordinate(passenger.DROP_LAT)!,
@@ -210,8 +258,8 @@ export function SavedRoutesView({
   savedRoutes,
   onDeleteRoute,
   onToggleVisibility,
+  onClearRoutes,
 }: SavedRoutesViewProps) {
-  
   const mapContainer = useRef<HTMLDivElement>(null);
   const map = useRef<mapboxgl.Map | null>(null);
   const markersRef = useRef<mapboxgl.Marker[]>([]);
@@ -347,16 +395,31 @@ export function SavedRoutesView({
       const driverData = getDriverForRoute(route);
       if (driverData) {
         const el = document.createElement("div");
-        el.style.width = "36px";
-        el.style.height = "36px";
-        el.style.borderRadius = "50%";
-        el.style.backgroundColor = route.color.primary;
-        el.style.border = "3px solid white";
-        el.style.boxShadow = "0 4px 8px rgba(0,0,0,0.3)";
         el.style.display = "flex";
+        el.style.flexDirection = "column";
         el.style.alignItems = "center";
-        el.style.justifyContent = "center";
-        el.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="white"><path d="M18.92 6.01C18.72 5.42 18.16 5 17.5 5h-11c-.66 0-1.21.42-1.42 1.01L3 12v8c0 .55.45 1 1 1h1c.55 0 1-.45 1-1v-1h12v1c0 .55.45 1 1 1h1c.55 0 1-.45 1-1v-8l-2.08-5.99zM6.5 16c-.83 0-1.5-.67-1.5-1.5S5.67 13 6.5 13s1.5.67 1.5 1.5S7.33 16 6.5 16zm11 0c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zM5 11l1.5-4.5h11L19 11H5z"/></svg>`;
+        el.style.cursor = "pointer";
+
+        // Get first name only for display
+        const displayName = driverData.name.split(" ")[0];
+
+        el.innerHTML = `
+         
+          <div style="
+            background-color: #f20505;
+            color: white;
+            font-size: 9px;
+            font-weight: 600;
+            padding: 2px 6px;
+            border-radius: 4px;
+            margin-top: 2px;
+            white-space: nowrap;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+            max-width: 70px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+          ">${displayName} - ${driverData?.time}</div>
+        `;
 
         const marker = new mapboxgl.Marker(el)
           .setLngLat(driverData.coordinates)
@@ -387,18 +450,50 @@ export function SavedRoutesView({
       const passengerDataList = getPassengersForRoute(route);
       passengerDataList.forEach((passenger) => {
         // Pickup marker
+        console.log(passenger, "passenger");
+
+        const displayTime = passenger.time ? passenger.time.slice(0, 5) : "";
         const el = document.createElement("div");
-        el.style.width = "30px";
-        el.style.height = "30px";
-        el.style.borderRadius = "50%";
-        el.style.backgroundColor = route.color.primary;
-        el.style.border = "3px solid white";
-        el.style.boxShadow = "0 4px 8px rgba(0,0,0,0.3)";
         el.style.display = "flex";
+        el.style.flexDirection = "column";
         el.style.alignItems = "center";
         el.style.justifyContent = "center";
+        el.style.cursor = "pointer";
         el.style.opacity = "0.9";
-        el.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="white"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>`;
+        const timeBadgeHTML = formatTimeBadge(passenger.time);
+        el.innerHTML = `
+          <div style="display:flex; flex-direction:column; align-items:center;">
+            <div style="
+              width: 30px;
+              height: 30px;
+              border-radius: 50%;
+              background-color: #3b82f5;
+              border: 3px solid white;
+              box-shadow: 0 4px 8px rgba(0,0,0,0.3);
+              display: flex;
+              align-items: center;
+              justify-content: center;
+            ">
+              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="white"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>
+            </div>
+            
+          </div>
+           ${
+             displayTime
+               ? `<div style="
+          background-color: #036ffc;
+          color: white;
+          font-size: 9px;
+          font-weight: 600;
+          padding: 2px 5px;
+          border-radius: 4px;
+          margin-top: 2px;
+          white-space: nowrap;
+          box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+        ">${displayTime}</div>`
+               : ""
+           }
+        `;
 
         const marker = new mapboxgl.Marker(el)
           .setLngLat(passenger.coordinates)
@@ -406,18 +501,30 @@ export function SavedRoutesView({
             new mapboxgl.Popup().setHTML(`
             <div class="p-2">
               <div class="flex items-center gap-2 mb-2">
-                <div class="w-8 h-8 rounded-full flex items-center justify-center" style="background-color: ${route.color.primary}">
+                <div class="w-8 h-8 rounded-full flex items-center justify-center" style="background-color: ${
+                  route.color.primary
+                }">
                   <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="white"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>
                 </div>
                 <div>
                   <strong class="block">${passenger.name}</strong>
-                  <span class="text-xs font-bold" style="color: ${route.color.primary}">PICKUP - ${route.name}</span>
+                  <span class="text-xs font-bold" style="color: ${
+                    route.color.primary
+                  }">PICKUP - ${route.name}</span>
                 </div>
               </div>
-              <p class="text-xs text-gray-600 mb-1"><strong>Location:</strong> ${passenger.subPoint}</p>
-              <p class="text-xs text-gray-600 mb-1"><strong>Phone:</strong> ${passenger.phone}</p>
+              <p class="text-xs text-gray-600 mb-1"><strong>Location:</strong> ${
+                passenger.subPoint
+              }</p>
+              <p class="text-xs text-gray-600 mb-1"><strong>Phone:</strong> ${
+                passenger.phone
+              }</p>
               <p class="text-xs text-gray-500 mb-2">${passenger.address}</p>
-              ${passenger.destinationSubPoint ? `<p class="text-xs text-orange-600 font-medium"><strong>Destination:</strong> ${passenger.destinationSubPoint}</p>` : ""}
+              ${
+                passenger.destinationSubPoint
+                  ? `<p class="text-xs text-orange-600 font-medium"><strong>Destination:</strong> ${passenger.destinationSubPoint}</p>`
+                  : ""
+              }
             </div>
           `)
           )
@@ -478,32 +585,53 @@ export function SavedRoutesView({
                   </div>
                   <div>
                     <strong class="block">${passenger.name}</strong>
-                    <span class="text-xs text-orange-600 font-medium">DROP-OFF - ${route.name}</span>
+                    <span class="text-xs text-orange-600 font-medium">DROP-OFF - ${
+                      route.name
+                    }</span>
                   </div>
                 </div>
-                <p class="text-xs text-gray-600 mb-1"><strong>Destination:</strong> ${passenger.destinationSubPoint || "N/A"}</p>
-                <p class="text-xs text-gray-500">${passenger.destination || "N/A"}</p>
+                <p class="text-xs text-gray-600 mb-1"><strong>Destination:</strong> ${
+                  passenger.destinationSubPoint || "N/A"
+                }</p>
+                <p class="text-xs text-gray-500">${
+                  passenger.destination || "N/A"
+                }</p>
               </div>
             `;
           }
 
           // Multiple passengers - create carousel
-          const carouselId = `carousel-${route.id}-${coordKey.replace(/[.,]/g, "-")}`;
-          const passengersHTML = passengersAtDest.map((passenger, index) => `
-            <div class="carousel-slide" data-index="${index}" style="display: ${index === 0 ? "block" : "none"};">
+          const carouselId = `carousel-${route.id}-${coordKey.replace(
+            /[.,]/g,
+            "-"
+          )}`;
+          const passengersHTML = passengersAtDest
+            .map(
+              (passenger, index) => `
+            <div class="carousel-slide" data-index="${index}" style="display: ${
+                index === 0 ? "block" : "none"
+              };">
               <div class="flex items-center gap-2 mb-2">
                 <div class="w-8 h-8 rounded-full bg-orange-500 flex items-center justify-center flex-shrink-0">
                   <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="white"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/></svg>
                 </div>
                 <div class="min-w-0 flex-1">
                   <strong class="block truncate">${passenger.name}</strong>
-                  <span class="text-xs text-orange-600 font-medium">DROP-OFF - ${route.name}</span>
+                  <span class="text-xs text-orange-600 font-medium">DROP-OFF - ${
+                    route.name
+                  }</span>
                 </div>
               </div>
-              <p class="text-xs text-gray-600 mb-1"><strong>Destination:</strong> ${passenger.destinationSubPoint || "N/A"}</p>
-              <p class="text-xs text-gray-500 truncate">${passenger.destination || "N/A"}</p>
+              <p class="text-xs text-gray-600 mb-1"><strong>Destination:</strong> ${
+                passenger.destinationSubPoint || "N/A"
+              }</p>
+              <p class="text-xs text-gray-500 truncate">${
+                passenger.destination || "N/A"
+              }</p>
             </div>
-          `).join("");
+          `
+            )
+            .join("");
 
           return `
             <div class="p-2" style="min-width: 220px;">
@@ -540,18 +668,28 @@ export function SavedRoutesView({
         const setupCarouselEvents = () => {
           if (passengerCount <= 1) return;
 
-          const carouselId = `carousel-${route.id}-${coordKey.replace(/[.,]/g, "-")}`;
+          const carouselId = `carousel-${route.id}-${coordKey.replace(
+            /[.,]/g,
+            "-"
+          )}`;
           const container = document.getElementById(carouselId);
           if (!container) return;
 
           const slides = container.querySelectorAll(".carousel-slide");
-          const indicator = document.querySelector(`.carousel-indicator[data-carousel="${carouselId}"]`);
-          const prevBtn = document.querySelector(`.carousel-prev[data-carousel="${carouselId}"]`);
-          const nextBtn = document.querySelector(`.carousel-next[data-carousel="${carouselId}"]`);
+          const indicator = document.querySelector(
+            `.carousel-indicator[data-carousel="${carouselId}"]`
+          );
+          const prevBtn = document.querySelector(
+            `.carousel-prev[data-carousel="${carouselId}"]`
+          );
+          const nextBtn = document.querySelector(
+            `.carousel-next[data-carousel="${carouselId}"]`
+          );
 
           const showSlide = (index: number) => {
             slides.forEach((slide, i) => {
-              (slide as HTMLElement).style.display = i === index ? "block" : "none";
+              (slide as HTMLElement).style.display =
+                i === index ? "block" : "none";
             });
             if (indicator) {
               indicator.textContent = `${index + 1} / ${passengerCount}`;
@@ -561,13 +699,15 @@ export function SavedRoutesView({
 
           prevBtn?.addEventListener("click", (e) => {
             e.stopPropagation();
-            const newIndex = currentSlide === 0 ? passengerCount - 1 : currentSlide - 1;
+            const newIndex =
+              currentSlide === 0 ? passengerCount - 1 : currentSlide - 1;
             showSlide(newIndex);
           });
 
           nextBtn?.addEventListener("click", (e) => {
             e.stopPropagation();
-            const newIndex = currentSlide === passengerCount - 1 ? 0 : currentSlide + 1;
+            const newIndex =
+              currentSlide === passengerCount - 1 ? 0 : currentSlide + 1;
             showSlide(newIndex);
           });
 
@@ -706,6 +846,7 @@ export function SavedRoutesView({
 
     // Prepare data for Excel
     const excelData: any[] = [];
+    const driverRowIndices: number[] = []; // Track driver row indices for styling
 
     routesToExport.forEach((route) => {
       const driverData = getDriverForRoute(route);
@@ -728,6 +869,7 @@ export function SavedRoutesView({
 
       // Add driver row
       if (driverData) {
+        driverRowIndices.push(excelData.length + 1); // +1 for header row
         excelData.push({
           "Route Name": "",
           Type: "",
@@ -736,7 +878,7 @@ export function SavedRoutesView({
           "Duration (min)": "",
           "Route Color": "",
           Role: "Driver",
-          Name: driverData.name,
+          Name: `${driverData.name} - ${driverData.id} - (${driverData.subPoint}) - ${driverData.time}`,
           Phone: driverData.phone,
           "Pickup Location": driverData.address,
           "Drop Location": "",
@@ -753,7 +895,7 @@ export function SavedRoutesView({
           "Duration (min)": "",
           "Route Color": "",
           Role: "Passenger",
-          Name: passenger.name,
+          Name: `${passenger.name} - ${passenger.id} - (${passenger.subPoint}) - (${passenger.destinationSubPoint}) - ${passenger.time}`,
           Phone: passenger.phone,
           "Pickup Location": passenger.address,
           "Drop Location": passenger.destination || "",
@@ -778,6 +920,16 @@ export function SavedRoutesView({
 
     // Create worksheet
     const worksheet = XLSX.utils.json_to_sheet(excelData);
+
+    // Apply red color and bold style to driver Name cells (column H)
+    driverRowIndices.forEach((rowIndex) => {
+      const cellAddress = `H${rowIndex}`;
+      if (worksheet[cellAddress]) {
+        worksheet[cellAddress].s = {
+          font: { bold: true, color: { rgb: "FF0000" } },
+        };
+      }
+    });
 
     // Set column widths
     worksheet["!cols"] = [
@@ -804,7 +956,9 @@ export function SavedRoutesView({
 
     // Generate filename with current date
     const today = new Date();
-    const dateStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+    const dateStr = `${today.getFullYear()}-${String(
+      today.getMonth() + 1
+    ).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
     const filename = `${routeType}_routes_${dateStr}.xlsx`;
 
     // Save file
@@ -827,10 +981,10 @@ export function SavedRoutesView({
       <div className="space-y-3">
         {routes.map((route) => {
           // Find driver and passengers using the generated IDs
+          console.log(route, "routevfdsf");
           const driverData = getDriverForRoute(route);
           const passengerDataList = getPassengersForRoute(route);
           const isExpanded = expandedRoutes.has(route.id);
-
           return (
             <Card
               key={route.id}
@@ -855,7 +1009,10 @@ export function SavedRoutesView({
                       }}
                     />
                     <div className="flex-1">
-                      <CardTitle className="text-base">{route.name}</CardTitle>
+                      <CardTitle className="text-base text-[13px]">
+                        {route.name} - {driverData?.name} - {driverData?.id} -{" "}
+                        {driverData?.subPoint} - {driverData?.time}
+                      </CardTitle>
                       <div className="flex items-center gap-2 mt-1">
                         <p className="text-xs text-gray-500">
                           {formatDate(route.createdAt)}
@@ -875,27 +1032,32 @@ export function SavedRoutesView({
                       )}
                     </div>
                   </button>
-                  <div className="flex items-center gap-1 ml-2">
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      onClick={() => onToggleVisibility(route.id)}
-                      title={route.visible ? "Hide route" : "Show route"}
-                    >
-                      {route.visible ? (
-                        <Eye className="w-4 h-4 text-blue-600" />
-                      ) : (
-                        <EyeOff className="w-4 h-4 text-gray-400" />
-                      )}
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      onClick={() => onDeleteRoute(route.id)}
-                      title="Delete route"
-                    >
-                      <Trash2 className="w-4 h-4 text-red-500" />
-                    </Button>
+                  <div className="flex flex-col items-end gap-1 ml-2">
+                    <div className="flex items-center gap-1">
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => onToggleVisibility(route.id)}
+                        title={route.visible ? "Hide route" : "Show route"}
+                      >
+                        {route.visible ? (
+                          <Eye className="w-4 h-4 text-blue-600" />
+                        ) : (
+                          <EyeOff className="w-4 h-4 text-gray-400" />
+                        )}
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => onDeleteRoute(route.id)}
+                        title="Delete route"
+                      >
+                        <Trash2 className="w-4 h-4 text-red-500" />
+                      </Button>
+                    </div>
+                    <p className="text-xs text-black-600 font-medium flex gap-2">
+                      {passengerDataList.length} <User size={16} />
+                    </p>
                   </div>
                 </div>
               </CardHeader>
@@ -931,7 +1093,8 @@ export function SavedRoutesView({
                         <div className="flex items-center gap-2">
                           <User className="w-4 h-4 text-blue-600" />
                           <span className="text-sm font-medium text-gray-900">
-                            {driverData.name}
+                            {driverData.name} - {driverData.id} -{" "}
+                            {driverData.subPoint}
                           </span>
                         </div>
                         <div className="flex items-center gap-2">
@@ -960,15 +1123,23 @@ export function SavedRoutesView({
                             <div className="flex items-center gap-2">
                               <User className="w-4 h-4 text-green-600" />
                               <span className="text-sm font-medium text-gray-900">
-                                {passenger.name}
+                                {passenger?.name} - {passenger.id} -
+                                <div className="flex items-center gap-2">
+                                  <span className="text-sm font-medium text-gray-900">
+                                    ({passenger.subPoint})
+                                  </span>
+                                  <MoveRight className="w-4 h-4 text-blue-600" />
+                                  <span className="text-sm font-medium text-gray-900">
+                                    ({passenger.destinationSubPoint})
+                                  </span>
+                                </div>
+                                -{" "}
+                                <span className="text-red-600">
+                                  {passenger?.time}
+                                </span>
                               </span>
                             </div>
-                            <div className="flex items-center gap-2">
-                              <Phone className="w-4 h-4 text-green-600" />
-                              <span className="text-sm text-gray-700">
-                                {passenger.phone}
-                              </span>
-                            </div>
+
                             <div className="flex items-start gap-2">
                               <MapPin className="w-4 h-4 text-green-600 mt-0.5" />
                               <span className="text-sm text-gray-700">
@@ -1025,7 +1196,23 @@ export function SavedRoutesView({
       <div className="w-96 bg-white border-r overflow-y-auto">
         <div className="p-4 space-y-4">
           <div>
-            <h2 className="text-xl font-bold">Saved Routes</h2>
+            <h2 className="text-xl font-bold">
+              Saved Routes{" "}
+              <Button
+                onClick={() => onClearRoutes?.(activeTab)}
+                size="sm"
+                variant="outline"
+                className="gap-2 text-red-500 hover:text-red-600 hover:bg-red-50"
+                disabled={
+                  activeTab === "going"
+                    ? goingRoutes.length === 0
+                    : returnRoutes.length === 0
+                }
+              >
+                <Trash2 className="w-4 h-4" />
+                Clear
+              </Button>
+            </h2>
             <p className="text-sm text-gray-600 mt-1">
               {savedRoutes.length}{" "}
               {savedRoutes.length === 1 ? "route" : "routes"} saved
@@ -1046,20 +1233,22 @@ export function SavedRoutesView({
                   Return Routes ({returnRoutes.length})
                 </TabsTrigger>
               </TabsList>
-              <Button
-                onClick={() => exportToExcel(activeTab)}
-                size="sm"
-                variant="outline"
-                className="gap-2"
-                disabled={
-                  activeTab === "going"
-                    ? goingRoutes.length === 0
-                    : returnRoutes.length === 0
-                }
-              >
-                <FileDown className="w-4 h-4" />
-                Export
-              </Button>
+              <div className="flex flex-col gap-1">
+                <Button
+                  onClick={() => exportToExcel(activeTab)}
+                  size="sm"
+                  variant="outline"
+                  className="gap-2"
+                  disabled={
+                    activeTab === "going"
+                      ? goingRoutes.length === 0
+                      : returnRoutes.length === 0
+                  }
+                >
+                  <FileDown className="w-4 h-4" />
+                  Export
+                </Button>
+              </div>
             </div>
 
             <TabsContent value="going" className="mt-4">
