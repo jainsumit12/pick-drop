@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from "react";
+﻿import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import mapboxgl from "mapbox-gl";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 import { Button } from "./ui/button";
@@ -270,6 +271,10 @@ export function SavedRoutesView({
 
   // Track which routes are expanded/collapsed
   const [expandedRoutes, setExpandedRoutes] = useState<Set<string>>(new Set());
+
+  const [showClearDialog, setShowClearDialog] = useState(false);
+  const [showInfoDialog, setShowInfoDialog] = useState(false);
+  const [infoDialogMessage, setInfoDialogMessage] = useState("");
 
   // Convert all drivers to locations with IDs
   const allDrivers = convertRidersToLocations([
@@ -821,6 +826,22 @@ export function SavedRoutesView({
   );
 
   // Toggle route expansion
+  const handleClearRoutesClick = () => {
+    if (!onClearRoutes) {
+      return;
+    }
+    setShowClearDialog(true);
+  };
+
+  const handleConfirmClearRoutes = () => {
+    onClearRoutes?.(activeTab);
+    setShowClearDialog(false);
+  };
+
+  const handleCancelClearRoutes = () => {
+    setShowClearDialog(false);
+  };
+
   const toggleRouteExpansion = (routeId: string) => {
     setExpandedRoutes((prev) => {
       const newSet = new Set(prev);
@@ -840,7 +861,8 @@ export function SavedRoutesView({
     );
 
     if (routesToExport.length === 0) {
-      alert(`No ${routeType} routes to export`);
+      setInfoDialogMessage(`No ${routeType} routes to export`);
+      setShowInfoDialog(true);
       return;
     }
 
@@ -869,7 +891,6 @@ export function SavedRoutesView({
 
       // Add driver row
       if (driverData) {
-        driverRowIndices.push(excelData.length + 1); // +1 for header row
         excelData.push({
           "Route Name": "",
           Type: "",
@@ -883,6 +904,7 @@ export function SavedRoutesView({
           "Pickup Location": driverData.address,
           "Drop Location": "",
         });
+        driverRowIndices.push(excelData.length + 1); // +1 for header row
       }
 
       // Add passenger rows
@@ -921,13 +943,16 @@ export function SavedRoutesView({
     // Create worksheet
     const worksheet = XLSX.utils.json_to_sheet(excelData);
 
-    // Apply red color and bold style to driver Name cells (column H)
+    // Apply red color and bold style to driver Role (G) and Name (H) cells
     driverRowIndices.forEach((rowIndex) => {
-      const cellAddress = `H${rowIndex}`;
-      if (worksheet[cellAddress]) {
-        worksheet[cellAddress].s = {
-          font: { bold: true, color: { rgb: "FF0000" } },
-        };
+      const style = { font: { bold: true, color: { rgb: "FF0000" } } };
+      const roleCell = `G${rowIndex}`;
+      const nameCell = `H${rowIndex}`;
+      if (worksheet[roleCell]) {
+        worksheet[roleCell].s = style;
+      }
+      if (worksheet[nameCell]) {
+        worksheet[nameCell].s = style;
       }
     });
 
@@ -1199,7 +1224,7 @@ export function SavedRoutesView({
             <h2 className="text-xl font-bold">
               Saved Routes{" "}
               <Button
-                onClick={() => onClearRoutes?.(activeTab)}
+                onClick={handleClearRoutesClick}
                 size="sm"
                 variant="outline"
                 className="gap-2 text-red-500 hover:text-red-600 hover:bg-red-50"
@@ -1285,6 +1310,118 @@ export function SavedRoutesView({
           </div>
         )}
       </div>
+      <InfoDialog
+        open={showInfoDialog}
+        title="Nothing to export"
+        description={infoDialogMessage}
+        confirmLabel="OK"
+        onConfirm={() => setShowInfoDialog(false)}
+      />
+      <ConfirmationDialog
+        open={showClearDialog}
+        title={`Clear ${activeTab} routes?`}
+        description="This will remove all saved routes in the current tab."
+        confirmLabel="Clear"
+        cancelLabel="Cancel"
+        onConfirm={handleConfirmClearRoutes}
+        onCancel={handleCancelClearRoutes}
+      />
     </div>
+  );
+}
+
+
+interface ConfirmationDialogProps {
+  open: boolean;
+  title: string;
+  description?: string;
+  confirmLabel?: string;
+  cancelLabel?: string;
+  onConfirm: () => void;
+  onCancel: () => void;
+}
+
+function ConfirmationDialog({
+  open,
+  title,
+  description,
+  confirmLabel = "Confirm",
+  cancelLabel = "Cancel",
+  onConfirm,
+  onCancel,
+}: ConfirmationDialogProps) {
+  if (!open || typeof document === "undefined") {
+    return null;
+  }
+
+  return createPortal(
+    <div className="fixed inset-0 z-50 flex items-center justify-center px-4">
+      <div
+        className="absolute inset-0 bg-black/40 backdrop-blur-sm"
+        onClick={onCancel}
+      ></div>
+      <div className="relative w-full max-w-md rounded-2xl border bg-white p-6 shadow-2xl">
+        <h3 className="text-base font-semibold text-gray-900">{title}</h3>
+        {description && (
+          <p className="mt-2 text-sm text-gray-600 leading-relaxed">
+            {description}
+          </p>
+        )}
+        <div className="mt-5 flex justify-end gap-3">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={onCancel}
+            className="h-9"
+          >
+            {cancelLabel}
+          </Button>
+          <Button size="sm" onClick={onConfirm} className="h-9">
+            {confirmLabel}
+          </Button>
+        </div>
+      </div>
+    </div>,
+    document.body
+  );
+}
+
+interface InfoDialogProps {
+  open: boolean;
+  title: string;
+  description?: string;
+  confirmLabel?: string;
+  onConfirm: () => void;
+}
+
+function InfoDialog({
+  open,
+  title,
+  description,
+  confirmLabel = "OK",
+  onConfirm,
+}: InfoDialogProps) {
+  if (!open || typeof document === "undefined") {
+    return null;
+  }
+
+  return createPortal(
+    <div className="fixed inset-0 z-50 flex items-center justify-center px-4">
+      <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
+      <div className="relative w-full max-w-md rounded-2xl border bg-white p-6 shadow-2xl">
+        <h3 className="text-base font-semibold text-gray-900">{title}</h3>
+        {description && (
+          <p className="mt-2 text-sm text-gray-600 leading-relaxed">
+            {description}
+          </p>
+        )}
+        <div className="mt-5 flex justify-end">
+          <Button size="sm" onClick={onConfirm} className="h-9">
+            {confirmLabel}
+          </Button>
+        </div>
+      </div>
+    </div>,
+    document.body
   );
 }

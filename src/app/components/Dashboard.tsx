@@ -50,9 +50,7 @@ export function Dashboard({ user, onLogout }: DashboardProps) {
   };
 
   const handleClearRoutes = (routeType: 'going' | 'return') => {
-    if (window.confirm(`Are you sure you want to clear all ${routeType} routes?`)) {
-      dispatch(clearRoutesByType(routeType));
-    }
+    dispatch(clearRoutesByType(routeType));
   };
 
   return (

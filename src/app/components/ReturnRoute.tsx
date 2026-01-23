@@ -1408,7 +1408,7 @@ export function ReturnRoute({ savedRoutes, onSaveRoute }: ReturnRouteProps) {
           </div>
 
           {/* Driver Selector */}
-          <div className="relative flex-1 min-w-0 max-w-[100px] sm:max-w-[140px] dropdown-container">
+          <div className="relative  min-w-0 max-w-[100px] sm:max-w-[140px] dropdown-container">
             <button
               onClick={() => {
                 setShowDriverDropdown(!showDriverDropdown);
@@ -1421,11 +1421,7 @@ export function ReturnRoute({ savedRoutes, onSaveRoute }: ReturnRouteProps) {
               <Car className="w-4 h-4 text-blue-600 flex-shrink-0" />
 
               <span className="flex-1 text-left truncate hidden lg:block">
-                {checkedDrivers.length > 0
-                  ? `${checkedDrivers.length} Driver${
-                      checkedDrivers.length > 1 ? "s" : ""
-                    }`
-                  : "Drivers"}
+                 Drivers
               </span>
               {/* <span className="sm:hidden font-medium text-blue-600">
                 {checkedDrivers.length > 0 ? checkedDrivers.length : ""}
@@ -1498,7 +1494,6 @@ export function ReturnRoute({ savedRoutes, onSaveRoute }: ReturnRouteProps) {
                                   ? driverTimeFilter.filter((t) => t !== time)
                                   : [...driverTimeFilter, time];
                                 setDriverTimeFilter(next);
-                                setShowDriverTimeDropdown(false);
                               }}
                               className="w-3.5 h-3.5 text-blue-600 rounded focus:ring-blue-500"
                             />
@@ -1526,7 +1521,6 @@ export function ReturnRoute({ savedRoutes, onSaveRoute }: ReturnRouteProps) {
                       <button
                         onClick={() => {
                           setDriverTimeFilter([]);
-                          setShowDriverTimeDropdown(false);
                         }}
                         className="text-xs text-blue-600 hover:underline"
                       >
@@ -1722,7 +1716,6 @@ export function ReturnRoute({ savedRoutes, onSaveRoute }: ReturnRouteProps) {
                               onClick={(e) => {
                                 e.stopPropagation();
                                 setTimeFilter([]);
-                                setShowTimeDropdown(false);
                               }}
                               className="text-xs text-blue-600 hover:underline"
                             >
@@ -1750,7 +1743,6 @@ export function ReturnRoute({ savedRoutes, onSaveRoute }: ReturnRouteProps) {
                                   } else {
                                     setTimeFilter([...timeFilter, time]);
                                   }
-                                  setShowTimeDropdown(false);
                                 }}
                                 className="w-3.5 h-3.5 text-green-600 rounded focus:ring-green-500"
                               />
@@ -1783,7 +1775,6 @@ export function ReturnRoute({ savedRoutes, onSaveRoute }: ReturnRouteProps) {
                           setPickupCityFilter("All");
                           setDestinationCityFilter("All");
                           setTimeFilter([]);
-                          setShowTimeDropdown(false);
                         }}
                         className="text-xs text-blue-600 hover:underline"
                       >
@@ -1971,102 +1962,97 @@ export function ReturnRoute({ savedRoutes, onSaveRoute }: ReturnRouteProps) {
             <p className="text-sm text-gray-600">Calculating route...</p>
           </div>
         )}
-      </div>
 
-      {/* Bottom Panel - Collapsible */}
-      {showBottomPanel && routeInfo && (
-        <div className="bg-white border-t shadow-lg">
-          <div className="px-4 py-3">
-            <div className="flex items-center justify-between gap-4">
-              <div className="flex items-center gap-6">
-                <div className="flex items-center gap-2">
-                  <Car className="w-5 h-5 text-blue-600" />
-                  <div>
-                    <p className="text-xs text-gray-500">Driver</p>
-                    <p className="font-medium text-sm">{currentDriver?.name}</p>
+        {/* Bottom Panel - Collapsible */}
+        {showBottomPanel && routeInfo && (
+          <div className="absolute bottom-0 left-0 right-0 z-20 bg-white border-t shadow-lg">
+            <div className="px-4 py-3">
+              <div className="flex items-center justify-between gap-4">
+                <div className="flex items-center gap-6">
+                  <div className="flex items-center gap-2">
+                    <Car className="w-5 h-5 text-blue-600" />
+                    <div>
+                      <p className="text-xs text-gray-500">Driver</p>
+                      <p className="font-medium text-sm">
+                        {currentDriver?.name}
+                      </p>
+                    </div>
                   </div>
+
+                  <div className="w-px h-10 bg-gray-200"></div>
+
+                  <div className="flex items-center gap-2">
+                    <Users className="w-5 h-5 text-green-600" />
+                    <div>
+                      <p className="text-xs text-gray-500">Passengers</p>
+                      <p className="font-medium text-sm">
+                        {selectedPassengers.length} selected
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="w-px h-10 bg-gray-200"></div>
+
+                  <div className="flex items-center gap-2">
+                    <Navigation className="w-5 h-5 text-blue-600" />
+                    <div>
+                      <p className="text-xs text-gray-500">Distance</p>
+                      <p className="font-bold text-sm text-blue-600">
+                        {routeInfo.distance.toFixed(1)} km
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="w-px h-10 bg-gray-200"></div>
+
+                  <div className="flex items-center gap-2">
+                    <Clock className="w-5 h-5 text-green-600" />
+                    <div>
+                      <p className="text-xs text-gray-500">Time</p>
+                      <p className="font-bold text-sm text-green-600">
+                        {Math.round(routeInfo.duration)} min
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="w-px h-10 bg-gray-200"></div>
+
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={changeRouteColor}
+                    className="h-9"
+                  >
+                    <div
+                      className="w-4 h-4 rounded-full mr-2"
+                      style={{
+                        backgroundColor: routeColors[routeColorIndex].primary,
+                      }}
+                    ></div>
+                    {routeColors[routeColorIndex].name} Route
+                  </Button>
                 </div>
 
-                <div className="w-px h-10 bg-gray-200"></div>
-
                 <div className="flex items-center gap-2">
-                  <Users className="w-5 h-5 text-green-600" />
-                  <div>
-                    <p className="text-xs text-gray-500">Passengers</p>
-                    <p className="font-medium text-sm">
-                      {selectedPassengers.length} selected
-                    </p>
-                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={clearSelections}
+                    className="h-9"
+                  >
+                    <X className="w-4 h-4 mr-2" />
+                    Clear
+                  </Button>
+                  <Button onClick={saveRoute} className="h-9">
+                    <Save className="w-4 h-4 mr-2" />
+                    Save Route
+                  </Button>
                 </div>
-
-                <div className="w-px h-10 bg-gray-200"></div>
-
-                <div className="flex items-center gap-2">
-                  <Navigation className="w-5 h-5 text-blue-600" />
-                  <div>
-                    <p className="text-xs text-gray-500">Distance</p>
-                    <p className="font-bold text-sm text-blue-600">
-                      {routeInfo.distance.toFixed(1)} km
-                    </p>
-                  </div>
-                </div>
-
-                <div className="w-px h-10 bg-gray-200"></div>
-
-                <div className="flex items-center gap-2">
-                  <Clock className="w-5 h-5 text-green-600" />
-                  <div>
-                    <p className="text-xs text-gray-500">Time</p>
-                    <p className="font-bold text-sm text-green-600">
-                      {Math.round(routeInfo.duration)} min
-                    </p>
-                  </div>
-                </div>
-
-                <div className="w-px h-10 bg-gray-200"></div>
-
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={changeRouteColor}
-                  className="h-9"
-                >
-                  <div
-                    className="w-4 h-4 rounded-full mr-2"
-                    style={{
-                      backgroundColor: routeColors[routeColorIndex].primary,
-                    }}
-                  ></div>
-                  {routeColors[routeColorIndex].name} Route
-                </Button>
-              </div>
-
-              <div className="flex items-center gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={clearSelections}
-                  className="h-9"
-                >
-                  <X className="w-4 h-4 mr-2" />
-                  Clear
-                </Button>
-                <Button onClick={saveRoute} className="h-9">
-                  <Save className="w-4 h-4 mr-2" />
-                  Save Route
-                </Button>
               </div>
             </div>
           </div>
-        </div>
-      )}
-      <InfoDialog
-        open={showSaveDialog}
-        title="Data saved"
-        description={saveDialogMessage}
-        confirmLabel="OK"
-        onConfirm={() => setShowSaveDialog(false)}
-      />
+        )}
+      </div>
 
       <ConfirmationDialog
         open={showClearDialog}
