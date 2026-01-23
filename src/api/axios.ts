@@ -4,7 +4,7 @@ import { store } from '../store';
 // Create axios instance with default config
 
 const axiosInstance = axios.create({
-  baseURL: 'https://cadride.ca/backend/api/',
+  baseURL: 'https://pickanddrop.app/backend/api/',
   timeout: 10000,
   headers: {
     'Content-Type': 'application/json',

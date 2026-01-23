@@ -5,6 +5,12 @@ interface RouteFilters {
   selectedShift: string;
   selectedDriver: string | null;
   selectedPassengers: string[];
+  pickupCityFilter: string;
+  destinationCityFilter: string;
+  timeFilter: string[];
+  driverTimeFilter: string[];
+  driverSearch: string;
+  passengerSearch: string;
 }
 
 interface FilterState {
@@ -22,12 +28,24 @@ const initialState: FilterState = {
     selectedShift: 'Morning',
     selectedDriver: null,
     selectedPassengers: [],
+    pickupCityFilter: 'All',
+    destinationCityFilter: 'All',
+    timeFilter: [],
+    driverTimeFilter: [],
+    driverSearch: '',
+    passengerSearch: '',
   },
   return: {
     selectedDate: getInitialDate(),
     selectedShift: 'Morning',
     selectedDriver: null,
     selectedPassengers: [],
+    pickupCityFilter: 'All',
+    destinationCityFilter: 'All',
+    timeFilter: [],
+    driverTimeFilter: [],
+    driverSearch: '',
+    passengerSearch: '',
   },
 };
 
@@ -52,22 +70,46 @@ const filterSlice = createSlice({
       state.going.selectedShift = 'Morning';
       state.going.selectedDriver = null;
       state.going.selectedPassengers = [];
+      state.going.pickupCityFilter = 'All';
+      state.going.destinationCityFilter = 'All';
+      state.going.timeFilter = [];
+      state.going.driverTimeFilter = [];
+      state.going.driverSearch = '';
+      state.going.passengerSearch = '';
     },
     resetReturnFilters: (state) => {
       state.return.selectedDate = getInitialDate();
       state.return.selectedShift = 'Morning';
       state.return.selectedDriver = null;
       state.return.selectedPassengers = [];
+      state.return.pickupCityFilter = 'All';
+      state.return.destinationCityFilter = 'All';
+      state.return.timeFilter = [];
+      state.return.driverTimeFilter = [];
+      state.return.driverSearch = '';
+      state.return.passengerSearch = '';
     },
     resetAllFilters: (state) => {
       state.going.selectedDate = getInitialDate();
       state.going.selectedShift = 'Morning';
       state.going.selectedDriver = null;
       state.going.selectedPassengers = [];
+      state.going.pickupCityFilter = 'All';
+      state.going.destinationCityFilter = 'All';
+      state.going.timeFilter = [];
+      state.going.driverTimeFilter = [];
+      state.going.driverSearch = '';
+      state.going.passengerSearch = '';
       state.return.selectedDate = getInitialDate();
       state.return.selectedShift = 'Morning';
       state.return.selectedDriver = null;
       state.return.selectedPassengers = [];
+      state.return.pickupCityFilter = 'All';
+      state.return.destinationCityFilter = 'All';
+      state.return.timeFilter = [];
+      state.return.driverTimeFilter = [];
+      state.return.driverSearch = '';
+      state.return.passengerSearch = '';
     },
     // Going route selection actions
     setGoingDriver: (state, action: PayloadAction<string | null>) => {
@@ -76,12 +118,48 @@ const filterSlice = createSlice({
     setGoingPassengers: (state, action: PayloadAction<string[]>) => {
       state.going.selectedPassengers = action.payload;
     },
+    setGoingPickupCityFilter: (state, action: PayloadAction<string>) => {
+      state.going.pickupCityFilter = action.payload;
+    },
+    setGoingDestinationCityFilter: (state, action: PayloadAction<string>) => {
+      state.going.destinationCityFilter = action.payload;
+    },
+    setGoingTimeFilter: (state, action: PayloadAction<string[]>) => {
+      state.going.timeFilter = action.payload;
+    },
+    setGoingDriverTimeFilter: (state, action: PayloadAction<string[]>) => {
+      state.going.driverTimeFilter = action.payload;
+    },
+    setGoingDriverSearch: (state, action: PayloadAction<string>) => {
+      state.going.driverSearch = action.payload;
+    },
+    setGoingPassengerSearch: (state, action: PayloadAction<string>) => {
+      state.going.passengerSearch = action.payload;
+    },
     // Return route selection actions
     setReturnDriver: (state, action: PayloadAction<string | null>) => {
       state.return.selectedDriver = action.payload;
     },
     setReturnPassengers: (state, action: PayloadAction<string[]>) => {
       state.return.selectedPassengers = action.payload;
+    },
+    setReturnPickupCityFilter: (state, action: PayloadAction<string>) => {
+      state.return.pickupCityFilter = action.payload;
+    },
+    setReturnDestinationCityFilter: (state, action: PayloadAction<string>) => {
+      state.return.destinationCityFilter = action.payload;
+    },
+    setReturnTimeFilter: (state, action: PayloadAction<string[]>) => {
+      state.return.timeFilter = action.payload;
+    },
+    setReturnDriverTimeFilter: (state, action: PayloadAction<string[]>) => {
+      state.return.driverTimeFilter = action.payload;
+    },
+    setReturnDriverSearch: (state, action: PayloadAction<string>) => {
+      state.return.driverSearch = action.payload;
+    },
+    setReturnPassengerSearch: (state, action: PayloadAction<string>) => {
+      state.return.passengerSearch = action.payload;
     },
   },
 });
@@ -96,7 +174,19 @@ export const {
   resetAllFilters,
   setGoingDriver,
   setGoingPassengers,
+  setGoingPickupCityFilter,
+  setGoingDestinationCityFilter,
+  setGoingTimeFilter,
+  setGoingDriverTimeFilter,
+  setGoingDriverSearch,
+  setGoingPassengerSearch,
   setReturnDriver,
   setReturnPassengers,
+  setReturnPickupCityFilter,
+  setReturnDestinationCityFilter,
+  setReturnTimeFilter,
+  setReturnDriverTimeFilter,
+  setReturnDriverSearch,
+  setReturnPassengerSearch,
 } = filterSlice.actions;
 export default filterSlice.reducer;
