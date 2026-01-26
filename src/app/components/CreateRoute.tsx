@@ -21,6 +21,8 @@ import {
   Download,
   Loader2,
   Trash,
+  Building2,
+  Home,
 } from "lucide-react";
 import { driversService, passengersService } from "../../api/services";
 import { RouteParticipant, SavedRoute, RouteInfo } from "../../types/route";
@@ -311,15 +313,6 @@ export function CreateRoute({ savedRoutes, onSaveRoute }: CreateRouteProps) {
     selectedShift,
   );
 
-  const displayDriverCount =
-    driversData.length > 0
-      ? driversData.length
-      : savedRouteData?.drivers.length ?? drivers.length;
-  const displayPassengerCount =
-    passengersData.length > 0
-      ? passengersData.length
-      : savedRouteData?.passengers.length ?? passengers.length;
-
   // Filter out drivers and passengers that are already used in saved GOING routes only
   // const usedDriverIds = new Set(
   //   savedRoutes
@@ -336,6 +329,12 @@ export function CreateRoute({ savedRoutes, onSaveRoute }: CreateRouteProps) {
   const availablePassengers = passengers.filter(
     (passenger) => !usedPassengerIds.has(passenger.id),
   );
+
+  const displayDriverCount =
+    driversData.length > 0
+      ? driversData.length
+      : savedRouteData?.drivers.length ?? drivers.length;
+  const displayPassengerCount = availablePassengers.length;
 
   // Extract unique filter options from passenger data
   const rawPassengerData = passengersData.filter(
@@ -364,8 +363,10 @@ export function CreateRoute({ savedRoutes, onSaveRoute }: CreateRouteProps) {
 
   // Filter drivers and passengers based on search
   const filteredDrivers = availableDrivers.filter((d) => {
+    const driverId = String(d.id).toLowerCase();
     const matchesSearch =
       d.name.toLowerCase().includes(driverSearch.toLowerCase()) ||
+      driverId.includes(driverSearch.toLowerCase()) ||
       d.subPoint.toLowerCase().includes(driverSearch.toLowerCase());
 
     // Find original driver data to check time (same approach as passenger filter)
@@ -390,8 +391,10 @@ export function CreateRoute({ savedRoutes, onSaveRoute }: CreateRouteProps) {
     return matchesSearch && matchesTime;
   });
   const filteredPassengers = availablePassengers.filter((p) => {
+    const passengerId = String(p.id).toLowerCase();
     const matchesSearch =
       p.name.toLowerCase().includes(passengerSearch.toLowerCase()) ||
+      passengerId.includes(passengerSearch.toLowerCase()) ||
       p.subPoint.toLowerCase().includes(passengerSearch.toLowerCase()) ||
       (p.destinationSubPoint &&
         p.destinationSubPoint
@@ -1695,7 +1698,16 @@ export function CreateRoute({ savedRoutes, onSaveRoute }: CreateRouteProps) {
                         </div>
                         <div className="flex-1 min-w-0">
                           <p className="font-medium text-sm truncate">
-                            {driver.name}
+                            {driver.name}{" "}
+                            <span className="text-xs text-gray-400">
+                              ({driver.id})
+                            </span>
+                            {driver.time && (
+                              <span className="text-xs text-gray-500">
+                                {" "}
+                                - {driver.time}
+                              </span>
+                            )}
                           </p>
                           <div className="flex items-center gap-2 text-xs text-gray-500">
                             <MapPin className="w-3 h-3" />
@@ -1911,15 +1923,25 @@ export function CreateRoute({ savedRoutes, onSaveRoute }: CreateRouteProps) {
                         </div>
                         <div className="flex-1 min-w-0">
                           <p className="font-medium text-sm truncate">
-                            {passenger.name}
+                            {passenger.name}{" "}
+                            <span className="text-xs text-gray-400">
+                              ({passenger.id})
+                            </span>
+                            {passenger.time && (
+                              <span className="text-xs text-gray-500">
+                                {" "}
+                                - {passenger.time}
+                              </span>
+                            )}
                           </p>
                           <div className="flex items-center gap-2 text-xs text-gray-500">
-                            <MapPin className="w-3 h-3" />
+                            <Building2 className="w-3 h-3" />
                             <span>{passenger.subPoint}</span>
                             {passenger.destinationSubPoint && (
                               <>
                                 <span>?</span>
-                                <span className="text-orange-600">
+                                <Home className="w-3 h-3" />
+                                <span>
                                   {passenger.destinationSubPoint}
                                 </span>
                               </>
