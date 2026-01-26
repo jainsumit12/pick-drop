@@ -553,23 +553,38 @@ export function ReturnRoute({ savedRoutes, onSaveRoute }: ReturnRouteProps) {
         ? filteredDrivers.filter((d) => checkedDrivers.includes(d.id))
         : filteredDrivers;
 
+    const driverGroups = new Map<string, Location[]>();
     driversToShow.forEach((driver) => {
-      const isSelected = driver.id === selectedDriver;
-      const displayName = driver.name.split(" ")[0];
-      const el = document.createElement("div");
-      el.style.boxShadow = isSelected
-        ? "0 6px 14px rgba(37,99,235,0.35)"
-        : "0 2px 4px rgba(0,0,0,0.2)";
-      el.style.display = "flex";
-      el.style.alignItems = "center";
-      el.style.justifyContent = "center";
-      el.style.cursor = "pointer";
-      el.style.transition = "all 0.2s";
-      el.style.transform = isSelected ? "scale(1.08)" : "scale(1)";
+      const coordKey = `${driver.coordinates[0]},${driver.coordinates[1]}`;
+      if (!driverGroups.has(coordKey)) {
+        driverGroups.set(coordKey, []);
+      }
+      driverGroups.get(coordKey)!.push(driver);
+    });
 
-      el.style.borderRadius = "6px";
-      el.style.backgroundColor = isSelected ? "rgba(37,99,235,0.08)" : "";
-      el.innerHTML = `
+    driverGroups.forEach((driversAtLocation, coordKey) => {
+      const [lng, lat] = coordKey.split(",").map(Number);
+      const coordinates: [number, number] = [lng, lat];
+      const driverCount = driversAtLocation.length;
+
+      if (driverCount === 1) {
+        const driver = driversAtLocation[0];
+        const isSelected = driver.id === selectedDriver;
+        const displayName = driver.name.split(" ")[0];
+        const el = document.createElement("div");
+        el.style.boxShadow = isSelected
+          ? "0 6px 14px rgba(37,99,235,0.35)"
+          : "0 2px 4px rgba(0,0,0,0.2)";
+        el.style.display = "flex";
+        el.style.alignItems = "center";
+        el.style.justifyContent = "center";
+        el.style.cursor = "pointer";
+        el.style.transition = "all 0.2s";
+        el.style.transform = isSelected ? "scale(1.08)" : "scale(1)";
+
+        el.style.borderRadius = "6px";
+        el.style.backgroundColor = isSelected ? "rgba(37,99,235,0.08)" : "";
+        el.innerHTML = `
           <div style="
             background-color: ${isSelected ? "#a10505" : "#f20505"};
             color: white;
@@ -586,23 +601,109 @@ export function ReturnRoute({ savedRoutes, onSaveRoute }: ReturnRouteProps) {
           ">${displayName} - ${driver?.time}</div>
         `;
 
-      // Click handler to select driver
-      el.addEventListener("click", () => {
-        popup.remove(); // keep popup hover-only
-        setSelectedDriver(driver.id);
-      });
+        // Click handler to select driver
+        el.addEventListener("click", () => {
+          popup.remove(); // keep popup hover-only
+          setSelectedDriver(driver.id);
+        });
 
-      const popup = new mapboxgl.Popup({
-        closeButton: false,
-        closeOnClick: false,
-      }).setHTML(`
+        const popup = new mapboxgl.Popup({
+          closeButton: false,
+          closeOnClick: false,
+        }).setHTML(`
           <div class="p-2">
             <div class="flex items-center gap-2 mb-2">
               <div class="w-8 h-8 rounded-full bg-blue-500 flex items-center justify-center">
                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="white"><path d="M18.92 6.01C18.72 5.42 18.16 5 17.5 5h-11c-.66 0-1.21.42-1.42 1.01L3 12v8c0 .55.45 1 1 1h1c.55 0 1-.45 1-1v-1h12v1c0 .55.45 1 1 1h1c.55 0 1-.45 1-1v-8l-2.08-5.99zM6.5 16c-.83 0-1.5-.67-1.5-1.5S5.67 13 6.5 13s1.5.67 1.5 1.5S7.33 16 6.5 16zm11 0c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zM5 11l1.5-4.5h11L19 11H5z"/></svg>
               </div>
               <div>
-                <strong class="block">${driver.name}</strong>
+                <strong class="block">${driver.name},  ${driver.id}</strong>
+                <span class="text-xs ${
+                  isSelected ? "text-blue-600 font-bold" : "text-blue-600"
+                }">${isSelected ? "SELECTED DRIVER" : "DRIVER"}, ${
+                  driver.time
+                }</span>
+              </div>
+            </div>
+            <p class="text-xs text-gray-600 mb-1"><strong>Location:</strong> ${
+              driver.subPoint
+            }</p>
+            <p class="text-xs text-gray-600 mb-1"><strong>Phone:</strong> ${
+              driver.phone
+            }</p>
+            <p class="text-xs text-gray-500 mb-2">${driver.address}</p>
+            ${
+              !isSelected
+                ? '<p class="text-xs text-blue-600 font-medium cursor-pointer">Click marker to select</p>'
+                : ""
+            }
+          </div>
+        `);
+
+        // Hover handlers to show/hide popup
+        el.addEventListener("mouseenter", () => {
+          popup.setLngLat(driver.coordinates).addTo(map.current!);
+        });
+
+        el.addEventListener("mouseleave", () => {
+          popup.remove();
+        });
+
+        const marker = new mapboxgl.Marker(el)
+          .setLngLat(driver.coordinates)
+          .addTo(map.current!);
+
+        markersRef.current.push(marker);
+        return;
+      }
+
+      const groupEl = document.createElement("div");
+      groupEl.style.display = "flex";
+      groupEl.style.alignItems = "center";
+      groupEl.style.justifyContent = "center";
+      groupEl.style.cursor = "pointer";
+      groupEl.innerHTML = `
+        <div style="
+          background-color: #f20505;
+          color: white;
+          font-size: 9px;
+          font-weight: 600;
+          padding: 2px 6px;
+          border-radius: 4px;
+          white-space: nowrap;
+          box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+          display: inline-flex;
+          align-items: center;
+          gap: 4px;
+        ">
+          <span>Drivers</span>
+          <span style="
+            background: white;
+            color: #f20505;
+            font-size: 9px;
+            font-weight: 700;
+            padding: 0 4px;
+            border-radius: 10px;
+            line-height: 1.2;
+          ">${driverCount}</span>
+        </div>
+      `;
+
+      const createDriverCarouselHTML = () => {
+        const carouselId = `driver-carousel-${coordKey.replace(/[.,]/g, "-")}`;
+        const driversHTML = driversAtLocation
+          .map((driver, index) => {
+            const isSelected = driver.id === selectedDriver;
+            return `
+          <div class="carousel-slide" data-index="${index}" style="display: ${
+            index === 0 ? "block" : "none"
+          };">
+            <div class="flex items-center gap-2 mb-2">
+              <div class="w-8 h-8 rounded-full bg-blue-500 flex items-center justify-center flex-shrink-0">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="white"><path d="M18.92 6.01C18.72 5.42 18.16 5 17.5 5h-11c-.66 0-1.21.42-1.42 1.01L3 12v8c0 .55.45 1 1 1h1c.55 0 1-.45 1-1v-1h12v1c0 .55.45 1 1 1h1c.55 0 1-.45 1-1v-8l-2.08-5.99zM6.5 16c-.83 0-1.5-.67-1.5-1.5S5.67 13 6.5 13s1.5.67 1.5 1.5S7.33 16 6.5 16zm11 0c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zM5 11l1.5-4.5h11L19 11H5z"/></svg>
+              </div>
+              <div class="min-w-0 flex-1">
+                <strong class="block truncate">${driver.name}</strong>
                 <span class="text-xs ${
                   isSelected ? "text-blue-600 font-bold" : "text-blue-600"
                 }">${isSelected ? "SELECTED DRIVER" : "DRIVER"}</span>
@@ -621,46 +722,180 @@ export function ReturnRoute({ savedRoutes, onSaveRoute }: ReturnRouteProps) {
               driver.phone
             }</p>
             <p class="text-xs text-gray-500 mb-2">${driver.address}</p>
-            ${
-              !isSelected
-                ? '<p class="text-xs text-blue-600 font-medium cursor-pointer">Click marker to select</p>'
-                : ""
-            }
+            <button class="driver-select px-2 py-1 text-xs rounded border ${
+              isSelected
+                ? "border-blue-200 text-blue-600 bg-blue-50"
+                : "border-blue-600 text-blue-600 bg-white"
+            }" data-driver-id="${driver.id}">
+              ${isSelected ? "Selected" : "Select driver"}
+            </button>
           </div>
-        `);
+        `;
+          })
+          .join("");
 
-      // Hover handlers to show/hide popup
-      el.addEventListener("mouseenter", () => {
-        popup.setLngLat(driver.coordinates).addTo(map.current!);
+        return `
+          <div class="p-2" style="min-width: 240px;">
+            <div class="flex items-center justify-between mb-2 pb-2 border-b border-gray-200">
+              <span class="text-xs font-bold text-blue-600">${driverCount} Drivers at this location</span>
+            </div>
+            <div id="${carouselId}" class="carousel-container">
+              ${driversHTML}
+            </div>
+            <div class="flex items-center justify-between mt-3 pt-2 border-t border-gray-200">
+              <button class="carousel-prev px-2 py-1 text-xs bg-gray-100 hover:bg-gray-200 rounded transition-colors" data-carousel="${carouselId}">
+                <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg>
+              </button>
+              <span class="carousel-indicator text-xs text-gray-500" data-carousel="${carouselId}">1 / ${driverCount}</span>
+              <button class="carousel-next px-2 py-1 text-xs bg-gray-100 hover:bg-gray-200 rounded transition-colors" data-carousel="${carouselId}">
+                <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg>
+              </button>
+            </div>
+          </div>
+        `;
+      };
+
+      const driverPopup = new mapboxgl.Popup({
+        closeButton: false,
+        closeOnClick: false,
+        maxWidth: "280px",
+      }).setHTML(createDriverCarouselHTML());
+
+      let currentSlide = 0;
+      let closeTimeout: ReturnType<typeof setTimeout> | null = null;
+      let isPopupOpen = false;
+
+      const setupDriverCarouselEvents = () => {
+        const carouselId = `driver-carousel-${coordKey.replace(/[.,]/g, "-")}`;
+        const container = document.getElementById(carouselId);
+        if (!container) return;
+
+        const slides = container.querySelectorAll(".carousel-slide");
+        const indicator = document.querySelector(
+          `.carousel-indicator[data-carousel="${carouselId}"]`,
+        );
+        const prevBtn = document.querySelector(
+          `.carousel-prev[data-carousel="${carouselId}"]`,
+        );
+        const nextBtn = document.querySelector(
+          `.carousel-next[data-carousel="${carouselId}"]`,
+        );
+        const selectButtons = container.querySelectorAll(
+          ".driver-select[data-driver-id]",
+        );
+
+        const showSlide = (index: number) => {
+          slides.forEach((slide, i) => {
+            (slide as HTMLElement).style.display =
+              i === index ? "block" : "none";
+          });
+          if (indicator) {
+            indicator.textContent = `${index + 1} / ${driverCount}`;
+          }
+          currentSlide = index;
+        };
+
+        prevBtn?.addEventListener("click", (e) => {
+          e.stopPropagation();
+          const newIndex =
+            currentSlide === 0 ? driverCount - 1 : currentSlide - 1;
+          showSlide(newIndex);
+        });
+
+        nextBtn?.addEventListener("click", (e) => {
+          e.stopPropagation();
+          const newIndex =
+            currentSlide === driverCount - 1 ? 0 : currentSlide + 1;
+          showSlide(newIndex);
+        });
+
+        selectButtons.forEach((button) => {
+          button.addEventListener("click", (e) => {
+            e.stopPropagation();
+            const target = e.currentTarget as HTMLElement;
+            const driverId = target.getAttribute("data-driver-id");
+            if (!driverId) return;
+            setSelectedDriver(driverId);
+          });
+        });
+
+        const popupEl = driverPopup.getElement();
+        if (popupEl) {
+          popupEl.addEventListener("mouseenter", () => {
+            if (closeTimeout) {
+              clearTimeout(closeTimeout);
+              closeTimeout = null;
+            }
+          });
+
+          popupEl.addEventListener("mouseleave", () => {
+            closeTimeout = setTimeout(() => {
+              driverPopup.remove();
+              isPopupOpen = false;
+            }, 100);
+          });
+        }
+      };
+
+      groupEl.addEventListener("mouseenter", () => {
+        if (closeTimeout) {
+          clearTimeout(closeTimeout);
+          closeTimeout = null;
+        }
+        if (!isPopupOpen) {
+          currentSlide = 0;
+          driverPopup.setHTML(createDriverCarouselHTML());
+          driverPopup.setLngLat(coordinates).addTo(map.current!);
+          isPopupOpen = true;
+          setTimeout(setupDriverCarouselEvents, 0);
+        }
       });
 
-      el.addEventListener("mouseleave", () => {
-        popup.remove();
+      groupEl.addEventListener("mouseleave", () => {
+        closeTimeout = setTimeout(() => {
+          driverPopup.remove();
+          isPopupOpen = false;
+        }, 150);
       });
 
-      const marker = new mapboxgl.Marker(el)
-        .setLngLat(driver.coordinates)
+      const groupMarker = new mapboxgl.Marker(groupEl)
+        .setLngLat(coordinates)
         .addTo(map.current!);
 
-      markersRef.current.push(marker);
+      markersRef.current.push(groupMarker);
     });
 
     // Add filtered passenger markers with unique colors (work and home locations)
+    // Add filtered passenger markers with unique colors (work and home locations)
+    const workGroups = new Map<string, Location[]>();
     filteredPassengers.forEach((passenger) => {
-      const isSelected = selectedPassengers.includes(passenger.id);
-      const color = passenger.color || "#10b981";
+      const coordKey = `${passenger.coordinates[0]},${passenger.coordinates[1]}`;
+      if (!workGroups.has(coordKey)) {
+        workGroups.set(coordKey, []);
+      }
+      workGroups.get(coordKey)!.push(passenger);
+    });
 
-      // Format time for display (show only HH:MM)
-      const displayTime = passenger.time ? passenger.time.slice(0, 5) : "";
+    workGroups.forEach((passengersAtWork, coordKey) => {
+      const [lng, lat] = coordKey.split(",").map(Number);
+      const coordinates: [number, number] = [lng, lat];
+      const passengerCount = passengersAtWork.length;
 
-      // Add work location marker (Building icon) with time label
-      const workEl = document.createElement("div");
-      workEl.style.display = "flex";
-      workEl.style.flexDirection = "column";
-      workEl.style.alignItems = "center";
-      workEl.style.cursor = "pointer";
-      workEl.style.transition = "all 0.2s";
-      workEl.innerHTML = `
+      if (passengerCount === 1) {
+        const passenger = passengersAtWork[0];
+        const isSelected = selectedPassengers.includes(passenger.id);
+
+        // Format time for display (show only HH:MM)
+        const displayTime = passenger.time ? passenger.time.slice(0, 5) : "";
+
+        // Add work location marker (Building icon) with time label
+        const workEl = document.createElement("div");
+        workEl.style.display = "flex";
+        workEl.style.flexDirection = "column";
+        workEl.style.alignItems = "center";
+        workEl.style.cursor = "pointer";
+        workEl.style.transition = "all 0.2s";
+        workEl.innerHTML = `
         <div style="
           width: ${isSelected ? "32px" : "24px"};
           height: ${isSelected ? "32px" : "24px"};
@@ -675,6 +910,7 @@ export function ReturnRoute({ savedRoutes, onSaveRoute }: ReturnRouteProps) {
           display: flex;
           align-items: center;
           justify-content: center;
+          position: relative;
         ">
           <svg xmlns="http://www.w3.org/2000/svg" width="${
             isSelected ? "16" : "12"
@@ -698,17 +934,17 @@ export function ReturnRoute({ savedRoutes, onSaveRoute }: ReturnRouteProps) {
             : ""
         }`;
 
-      // Click handler to toggle passenger selection
-      workEl.addEventListener("click", () => {
-        workPopup.remove(); // hover-only popup
-        togglePassenger(passenger.id);
-      });
+        // Click handler to toggle passenger selection
+        workEl.addEventListener("click", () => {
+          workPopup.remove(); // hover-only popup
+          togglePassenger(passenger.id);
+        });
 
-      const workPopup = new mapboxgl.Popup({
-        closeButton: false,
-        closeOnClick: false,
-        maxWidth: "320px",
-      }).setHTML(`
+        const workPopup = new mapboxgl.Popup({
+          closeButton: false,
+          closeOnClick: false,
+          maxWidth: "320px",
+        }).setHTML(`
           <div style="padding: 12px; font-family: Arial, sans-serif; line-height: 1.4; color: #1f2937;">
             <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 12px;">
               <div style="width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; flex-shrink: 0;" class="bg-green-600">
@@ -766,23 +1002,238 @@ export function ReturnRoute({ savedRoutes, onSaveRoute }: ReturnRouteProps) {
           </div>
         `);
 
-      // Hover handlers to show/hide popup
+        // Hover handlers to show/hide popup
+        workEl.addEventListener("mouseenter", () => {
+          workPopup.setLngLat(passenger.coordinates).addTo(map.current!);
+        });
+
+        workEl.addEventListener("mouseleave", () => {
+          workPopup.remove();
+        });
+
+        const workMarker = new mapboxgl.Marker(workEl)
+          .setLngLat(passenger.coordinates)
+          .addTo(map.current!);
+
+        markersRef.current.push(workMarker);
+        return;
+      }
+
+      const workEl = document.createElement("div");
+      workEl.style.width = "32px";
+      workEl.style.height = "32px";
+      workEl.style.borderRadius = "50%";
+      workEl.style.backgroundColor = "#3b82f5";
+      workEl.style.border = "3px solid white";
+      workEl.style.boxShadow = "0 4px 8px rgba(0,0,0,0.3)";
+      workEl.style.display = "flex";
+      workEl.style.alignItems = "center";
+      workEl.style.justifyContent = "center";
+      workEl.style.cursor = "pointer";
+      workEl.style.position = "relative";
+      workEl.innerHTML = `
+        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="white"><path d="M12 7V3H2v18h20V7H12zM6 19H4v-2h2v2zm0-4H4v-2h2v2zm0-4H4V9h2v2zm0-4H4V5h2v2zm4 12H8v-2h2v2zm0-4H8v-2h2v2zm0-4H8V9h2v2zm0-4H8V5h2v2zm10 12h-8v-2h2v-2h-2v-2h2v-2h-2V9h8v10zm-2-8h-2v2h2v-2zm0 4h-2v2h2v-2z"/></svg>
+        <div style="position: absolute; top: -6px; right: -6px; background: #0f172a; color: white; font-size: 10px; font-weight: bold; width: 18px; height: 18px; border-radius: 50%; display: flex; align-items: center; justify-content: center; border: 2px solid white;">${passengerCount}</div>
+      `;
+
+      const createWorkCarouselHTML = () => {
+        const carouselId = `return-work-carousel-${coordKey.replace(/[.,]/g, "-")}`;
+        const passengersHTML = passengersAtWork
+          .map((passenger, index) => {
+            const isSelected = selectedPassengers.includes(passenger.id);
+            return `
+          <div class="carousel-slide" data-index="${index}" style="display: ${
+            index === 0 ? "block" : "none"
+          };">
+            <div class="flex items-center gap-2 mb-2">
+              <div class="w-8 h-8 rounded-full bg-green-500 flex items-center justify-center flex-shrink-0">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="white"><path d="M12 7V3H2v18h20V7H12zM6 19H4v-2h2v2zm0-4H4v-2h2v2zm0-4H4V9h2v2zm0-4H4V5h2v2zm4 12H8v-2h2v2zm0-4H8v-2h2v2zm0-4H8V9h2v2zm0-4H8V5h2v2zm10 12h-8v-2h2v-2h-2v-2h2v-2h-2V9h8v10zm-2-8h-2v2h2v-2zm0 4h-2v2h2v-2z"/></svg>
+              </div>
+              <div class="min-w-0 flex-1">
+                <strong class="block truncate">${passenger.name}, ${
+                  passenger.id
+                }</strong>
+                <span class="text-xs ${
+                  isSelected ? "text-green-600 font-bold" : "text-green-600"
+                }">${isSelected ? "SELECTED - WORK" : "WORK LOCATION"}, ${
+                  passenger.time || ""
+                }</span>
+              </div>
+            </div>
+            <p class="text-xs text-gray-600 mb-1"><strong>Pickup:</strong> ${
+              passenger.subPoint || "N/A"
+            }</p>
+            <p class="text-xs text-gray-500 truncate">${passenger.address || ""}</p>
+            <button class="passenger-toggle px-2 py-1 text-xs rounded border ${
+              isSelected
+                ? "border-green-200 text-green-700 bg-green-50"
+                : "border-green-600 text-green-600 bg-white"
+            }" data-passenger-id="${passenger.id}" data-selected="${
+              isSelected ? "true" : "false"
+            }">
+              ${isSelected ? "Remove passenger" : "Select passenger"}
+            </button>
+          </div>
+        `;
+          })
+          .join("");
+
+        return `
+          <div class="p-2" style="min-width: 260px;">
+            <div class="flex items-center justify-between mb-2 pb-2 border-b border-gray-200">
+              <span class="text-xs font-bold text-green-600">${passengerCount} Passengers at this location</span>
+            </div>
+            <div id="${carouselId}" class="carousel-container">
+              ${passengersHTML}
+            </div>
+            <div class="flex items-center justify-between mt-3 pt-2 border-t border-gray-200">
+              <button class="carousel-prev px-2 py-1 text-xs bg-gray-100 hover:bg-gray-200 rounded transition-colors" data-carousel="${carouselId}">
+                <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg>
+              </button>
+              <span class="carousel-indicator text-xs text-gray-500" data-carousel="${carouselId}">1 / ${passengerCount}</span>
+              <button class="carousel-next px-2 py-1 text-xs bg-gray-100 hover:bg-gray-200 rounded transition-colors" data-carousel="${carouselId}">
+                <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg>
+              </button>
+            </div>
+          </div>
+        `;
+      };
+
+      const workPopup = new mapboxgl.Popup({
+        closeButton: false,
+        closeOnClick: false,
+        maxWidth: "300px",
+      }).setHTML(createWorkCarouselHTML());
+
+      let currentSlide = 0;
+      let closeTimeout: ReturnType<typeof setTimeout> | null = null;
+      let isPopupOpen = false;
+
+      const setupWorkCarouselEvents = () => {
+        const carouselId = `return-work-carousel-${coordKey.replace(/[.,]/g, "-")}`;
+        const container = document.getElementById(carouselId);
+        if (!container) return;
+
+        const slides = container.querySelectorAll(".carousel-slide");
+        const indicator = document.querySelector(
+          `.carousel-indicator[data-carousel="${carouselId}"]`,
+        );
+        const prevBtn = document.querySelector(
+          `.carousel-prev[data-carousel="${carouselId}"]`,
+        );
+        const nextBtn = document.querySelector(
+          `.carousel-next[data-carousel="${carouselId}"]`,
+        );
+        const toggleButtons = container.querySelectorAll(
+          ".passenger-toggle[data-passenger-id]",
+        );
+
+        const showSlide = (index: number) => {
+          slides.forEach((slide, i) => {
+            (slide as HTMLElement).style.display =
+              i === index ? "block" : "none";
+          });
+          if (indicator) {
+            indicator.textContent = `${index + 1} / ${passengerCount}`;
+          }
+          currentSlide = index;
+        };
+
+        prevBtn?.addEventListener("click", (e) => {
+          e.stopPropagation();
+          const newIndex =
+            currentSlide === 0 ? passengerCount - 1 : currentSlide - 1;
+          showSlide(newIndex);
+        });
+
+        nextBtn?.addEventListener("click", (e) => {
+          e.stopPropagation();
+          const newIndex =
+            currentSlide === passengerCount - 1 ? 0 : currentSlide + 1;
+          showSlide(newIndex);
+        });
+
+        toggleButtons.forEach((button) => {
+          button.addEventListener("click", (e) => {
+            e.stopPropagation();
+            const target = e.currentTarget as HTMLElement;
+            const passengerId = target.getAttribute("data-passenger-id");
+            if (!passengerId) return;
+            const isSelected = target.getAttribute("data-selected") === "true";
+            togglePassenger(passengerId);
+            target.setAttribute("data-selected", isSelected ? "false" : "true");
+            target.textContent = isSelected
+              ? "Select passenger"
+              : "Remove passenger";
+          });
+        });
+
+        const popupEl = workPopup.getElement();
+        if (popupEl) {
+          popupEl.addEventListener("mouseenter", () => {
+            if (closeTimeout) {
+              clearTimeout(closeTimeout);
+              closeTimeout = null;
+            }
+          });
+
+          popupEl.addEventListener("mouseleave", () => {
+            closeTimeout = setTimeout(() => {
+              workPopup.remove();
+              isPopupOpen = false;
+            }, 100);
+          });
+        }
+      };
+
       workEl.addEventListener("mouseenter", () => {
-        workPopup.setLngLat(passenger.coordinates).addTo(map.current!);
+        if (closeTimeout) {
+          clearTimeout(closeTimeout);
+          closeTimeout = null;
+        }
+        if (!isPopupOpen) {
+          currentSlide = 0;
+          workPopup.setHTML(createWorkCarouselHTML());
+          workPopup.setLngLat(coordinates).addTo(map.current!);
+          isPopupOpen = true;
+          setTimeout(setupWorkCarouselEvents, 0);
+        }
       });
 
       workEl.addEventListener("mouseleave", () => {
-        workPopup.remove();
+        closeTimeout = setTimeout(() => {
+          workPopup.remove();
+          isPopupOpen = false;
+        }, 150);
       });
 
       const workMarker = new mapboxgl.Marker(workEl)
-        .setLngLat(passenger.coordinates)
+        .setLngLat(coordinates)
         .addTo(map.current!);
 
       markersRef.current.push(workMarker);
+    });
 
-      // Add home destination marker (Home icon) with time label - ALWAYS SHOW
-      if (passenger.destinationCoordinates) {
+    const homeGroups = new Map<string, Location[]>();
+    filteredPassengers.forEach((passenger) => {
+      if (!passenger.destinationCoordinates) return;
+      const coordKey = `${passenger.destinationCoordinates[0]},${passenger.destinationCoordinates[1]}`;
+      if (!homeGroups.has(coordKey)) {
+        homeGroups.set(coordKey, []);
+      }
+      homeGroups.get(coordKey)!.push(passenger);
+    });
+
+    homeGroups.forEach((passengersAtHome, coordKey) => {
+      const [lng, lat] = coordKey.split(",").map(Number);
+      const coordinates: [number, number] = [lng, lat];
+      const passengerCount = passengersAtHome.length;
+
+      if (passengerCount === 1) {
+        const passenger = passengersAtHome[0];
+        const isSelected = selectedPassengers.includes(passenger.id);
+        const displayTime = passenger.time ? passenger.time.slice(0, 5) : "";
+
         const homeEl = document.createElement("div");
         homeEl.style.display = "flex";
         homeEl.style.flexDirection = "column";
@@ -806,6 +1257,7 @@ export function ReturnRoute({ savedRoutes, onSaveRoute }: ReturnRouteProps) {
             align-items: center;
             justify-content: center;
             opacity: ${isSelected ? "1" : "0.75"};
+            position: relative;
           ">
             <svg xmlns="http://www.w3.org/2000/svg" width="${
               isSelected ? "14" : "10"
@@ -855,8 +1307,7 @@ export function ReturnRoute({ savedRoutes, onSaveRoute }: ReturnRouteProps) {
                   }</span>, <span>${passenger.time}</span>
                 </div>
               </div>
-            
-             
+
               <div style="display: flex; flex-direction: column; gap: 8px; font-size: 12px;">
                 <div style="border: 1px solid #e5e7eb; border-radius: 6px; padding: 8px; display: flex; gap: 8px; align-items: flex-start;">
                   <span style="flex-shrink: 0;">??</span>
@@ -902,9 +1353,7 @@ export function ReturnRoute({ savedRoutes, onSaveRoute }: ReturnRouteProps) {
 
         // Hover handlers to show/hide popup
         homeEl.addEventListener("mouseenter", () => {
-          homePopup
-            .setLngLat(passenger.destinationCoordinates!)
-            .addTo(map.current!);
+          homePopup.setLngLat(coordinates).addTo(map.current!);
         });
 
         homeEl.addEventListener("mouseleave", () => {
@@ -912,11 +1361,206 @@ export function ReturnRoute({ savedRoutes, onSaveRoute }: ReturnRouteProps) {
         });
 
         const homeMarker = new mapboxgl.Marker(homeEl)
-          .setLngLat(passenger.destinationCoordinates)
+          .setLngLat(coordinates)
           .addTo(map.current!);
 
         markersRef.current.push(homeMarker);
+        return;
       }
+
+      const homeEl = document.createElement("div");
+      homeEl.style.width = "28px";
+      homeEl.style.height = "28px";
+      homeEl.style.borderRadius = "50%";
+      homeEl.style.backgroundColor = "#629dfc";
+      homeEl.style.border = "3px solid white";
+      homeEl.style.boxShadow = "0 4px 8px rgba(0,0,0,0.3)";
+      homeEl.style.display = "flex";
+      homeEl.style.alignItems = "center";
+      homeEl.style.justifyContent = "center";
+      homeEl.style.cursor = "pointer";
+      homeEl.style.position = "relative";
+      homeEl.innerHTML = `
+        <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="white"><path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z"/></svg>
+        <div style="position: absolute; top: -6px; right: -6px; background: #0f172a; color: white; font-size: 10px; font-weight: bold; width: 18px; height: 18px; border-radius: 50%; display: flex; align-items: center; justify-content: center; border: 2px solid white;">${passengerCount}</div>
+      `;
+
+      const createHomeCarouselHTML = () => {
+        const carouselId = `return-home-carousel-${coordKey.replace(/[.,]/g, "-")}`;
+        const passengersHTML = passengersAtHome
+          .map((passenger, index) => {
+            const isSelected = selectedPassengers.includes(passenger.id);
+            return `
+          <div class="carousel-slide" data-index="${index}" style="display: ${
+            index === 0 ? "block" : "none"
+          };">
+            <div class="flex items-center gap-2 mb-2">
+              <div class="w-8 h-8 rounded-full bg-green-500 flex items-center justify-center flex-shrink-0">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="white"><path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z"/></svg>
+              </div>
+              <div class="min-w-0 flex-1">
+                <strong class="block truncate">${passenger.name}, ${
+                  passenger.id
+                }</strong>
+                <span class="text-xs ${
+                  isSelected ? "text-green-600 font-bold" : "text-green-600"
+                }">${isSelected ? "SELECTED - HOME" : "HOME DESTINATION"}, ${
+                  passenger.time || ""
+                }</span>
+              </div>
+            </div>
+            <p class="text-xs text-gray-600 mb-1"><strong>Home:</strong> ${
+              passenger.destinationSubPoint || "N/A"
+            }</p>
+            <p class="text-xs text-gray-500 truncate">${passenger.destination || ""}</p>
+            <button class="passenger-toggle px-2 py-1 text-xs rounded border ${
+              isSelected
+                ? "border-green-200 text-green-700 bg-green-50"
+                : "border-green-600 text-green-600 bg-white"
+            }" data-passenger-id="${passenger.id}" data-selected="${
+              isSelected ? "true" : "false"
+            }">
+              ${isSelected ? "Remove passenger" : "Select passenger"}
+            </button>
+          </div>
+        `;
+          })
+          .join("");
+
+        return `
+          <div class="p-2" style="min-width: 260px;">
+            <div class="flex items-center justify-between mb-2 pb-2 border-b border-gray-200">
+              <span class="text-xs font-bold text-green-600">${passengerCount} Passengers at this location</span>
+            </div>
+            <div id="${carouselId}" class="carousel-container">
+              ${passengersHTML}
+            </div>
+            <div class="flex items-center justify-between mt-3 pt-2 border-t border-gray-200">
+              <button class="carousel-prev px-2 py-1 text-xs bg-gray-100 hover:bg-gray-200 rounded transition-colors" data-carousel="${carouselId}">
+                <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg>
+              </button>
+              <span class="carousel-indicator text-xs text-gray-500" data-carousel="${carouselId}">1 / ${passengerCount}</span>
+              <button class="carousel-next px-2 py-1 text-xs bg-gray-100 hover:bg-gray-200 rounded transition-colors" data-carousel="${carouselId}">
+                <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg>
+              </button>
+            </div>
+          </div>
+        `;
+      };
+
+      const homePopup = new mapboxgl.Popup({
+        closeButton: false,
+        closeOnClick: false,
+        maxWidth: "300px",
+      }).setHTML(createHomeCarouselHTML());
+
+      let currentSlide = 0;
+      let closeTimeout: ReturnType<typeof setTimeout> | null = null;
+      let isPopupOpen = false;
+
+      const setupHomeCarouselEvents = () => {
+        const carouselId = `return-home-carousel-${coordKey.replace(/[.,]/g, "-")}`;
+        const container = document.getElementById(carouselId);
+        if (!container) return;
+
+        const slides = container.querySelectorAll(".carousel-slide");
+        const indicator = document.querySelector(
+          `.carousel-indicator[data-carousel="${carouselId}"]`,
+        );
+        const prevBtn = document.querySelector(
+          `.carousel-prev[data-carousel="${carouselId}"]`,
+        );
+        const nextBtn = document.querySelector(
+          `.carousel-next[data-carousel="${carouselId}"]`,
+        );
+        const toggleButtons = container.querySelectorAll(
+          ".passenger-toggle[data-passenger-id]",
+        );
+
+        const showSlide = (index: number) => {
+          slides.forEach((slide, i) => {
+            (slide as HTMLElement).style.display =
+              i === index ? "block" : "none";
+          });
+          if (indicator) {
+            indicator.textContent = `${index + 1} / ${passengerCount}`;
+          }
+          currentSlide = index;
+        };
+
+        prevBtn?.addEventListener("click", (e) => {
+          e.stopPropagation();
+          const newIndex =
+            currentSlide === 0 ? passengerCount - 1 : currentSlide - 1;
+          showSlide(newIndex);
+        });
+
+        nextBtn?.addEventListener("click", (e) => {
+          e.stopPropagation();
+          const newIndex =
+            currentSlide === passengerCount - 1 ? 0 : currentSlide + 1;
+          showSlide(newIndex);
+        });
+
+        toggleButtons.forEach((button) => {
+          button.addEventListener("click", (e) => {
+            e.stopPropagation();
+            const target = e.currentTarget as HTMLElement;
+            const passengerId = target.getAttribute("data-passenger-id");
+            if (!passengerId) return;
+            const isSelected = target.getAttribute("data-selected") === "true";
+            togglePassenger(passengerId);
+            target.setAttribute("data-selected", isSelected ? "false" : "true");
+            target.textContent = isSelected
+              ? "Select passenger"
+              : "Remove passenger";
+          });
+        });
+
+        const popupEl = homePopup.getElement();
+        if (popupEl) {
+          popupEl.addEventListener("mouseenter", () => {
+            if (closeTimeout) {
+              clearTimeout(closeTimeout);
+              closeTimeout = null;
+            }
+          });
+
+          popupEl.addEventListener("mouseleave", () => {
+            closeTimeout = setTimeout(() => {
+              homePopup.remove();
+              isPopupOpen = false;
+            }, 100);
+          });
+        }
+      };
+
+      homeEl.addEventListener("mouseenter", () => {
+        if (closeTimeout) {
+          clearTimeout(closeTimeout);
+          closeTimeout = null;
+        }
+        if (!isPopupOpen) {
+          currentSlide = 0;
+          homePopup.setHTML(createHomeCarouselHTML());
+          homePopup.setLngLat(coordinates).addTo(map.current!);
+          isPopupOpen = true;
+          setTimeout(setupHomeCarouselEvents, 0);
+        }
+      });
+
+      homeEl.addEventListener("mouseleave", () => {
+        closeTimeout = setTimeout(() => {
+          homePopup.remove();
+          isPopupOpen = false;
+        }, 150);
+      });
+
+      const homeMarker = new mapboxgl.Marker(homeEl)
+        .setLngLat(coordinates)
+        .addTo(map.current!);
+
+      markersRef.current.push(homeMarker);
     });
 
     // Auto-fit map to show all markers
@@ -1431,7 +2075,7 @@ export function ReturnRoute({ savedRoutes, onSaveRoute }: ReturnRouteProps) {
               <Car className="w-4 h-4 text-blue-600 flex-shrink-0" />
 
               <span className="flex-1 text-left truncate hidden lg:block">
-                 Drivers
+                Drivers
               </span>
               {/* <span className="sm:hidden font-medium text-blue-600">
                 {checkedDrivers.length > 0 ? checkedDrivers.length : ""}
@@ -2157,7 +2801,6 @@ function ConfirmationDialog({
   );
 }
 
-
 interface InfoDialogProps {
   open: boolean;
   title: string;
@@ -2194,6 +2837,6 @@ function InfoDialog({
         </div>
       </div>
     </div>,
-    document.body
+    document.body,
   );
 }
