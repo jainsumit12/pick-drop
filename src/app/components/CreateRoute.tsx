@@ -231,6 +231,7 @@ export function CreateRoute({ savedRoutes, onSaveRoute }: CreateRouteProps) {
   const mapContainer = useRef<HTMLDivElement>(null);
   const map = useRef<mapboxgl.Map | null>(null);
   const markersRef = useRef<mapboxgl.Marker[]>([]);
+  const selectedPassengersRef = useRef<string[]>(selectedPassengers);
   const [routeInfo, setRouteInfo] = useState<RouteInfo | null>(null);
   const [isCalculating, setIsCalculating] = useState(false);
   const [routeColorIndex, setRouteColorIndex] = useState(0);
@@ -306,6 +307,11 @@ export function CreateRoute({ savedRoutes, onSaveRoute }: CreateRouteProps) {
     setPassengersError(null);
     setCheckedDrivers([]);
   }, [normalizedShift, selectedDate, savedRouteData]);
+
+  // Keep selectedPassengersRef in sync with selectedPassengers
+  useEffect(() => {
+    selectedPassengersRef.current = selectedPassengers;
+  }, [selectedPassengers]);
 
   // Get drivers for selected shift
   const drivers = convertRidersToLocations(driversData, selectedShift);
@@ -500,6 +506,36 @@ export function CreateRoute({ savedRoutes, onSaveRoute }: CreateRouteProps) {
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
+
+  // Event delegation for passenger toggle buttons in map popups
+  useEffect(() => {
+    const handlePassengerToggle = (event: MouseEvent) => {
+      const target = event.target as HTMLElement;
+      const button = target.closest(".passenger-toggle[data-passenger-id]") as HTMLElement;
+      if (!button) return;
+
+      event.stopPropagation();
+      event.preventDefault();
+
+      const passengerId = button.getAttribute("data-passenger-id");
+      if (!passengerId) return;
+
+      const isSelected = button.getAttribute("data-selected") === "true";
+      const currentPassengers = selectedPassengersRef.current;
+      const newPassengers = currentPassengers.includes(passengerId)
+        ? currentPassengers.filter((id) => id !== passengerId)
+        : [...currentPassengers, passengerId];
+      // Use dispatch directly to avoid stale closure issues
+      dispatch(setGoingPassengers(newPassengers));
+
+      // Update button UI immediately
+      button.setAttribute("data-selected", isSelected ? "false" : "true");
+      button.textContent = isSelected ? "Select passenger" : "Remove passenger";
+    };
+
+    document.addEventListener("click", handlePassengerToggle);
+    return () => document.removeEventListener("click", handlePassengerToggle);
+  }, [dispatch]);
 
   useEffect(() => {
     if (!map.current) return;
@@ -922,7 +958,12 @@ export function CreateRoute({ savedRoutes, onSaveRoute }: CreateRouteProps) {
         // Click handler to toggle passenger selection
         el.addEventListener("click", () => {
           pickupPopup.remove(); // keep popup hover-only
-          togglePassenger(passenger.id);
+          // Use ref to get latest selectedPassengers and avoid stale closure
+          const currentPassengers = selectedPassengersRef.current;
+          const newPassengers = currentPassengers.includes(passenger.id)
+            ? currentPassengers.filter((id) => id !== passenger.id)
+            : [...currentPassengers, passenger.id];
+          setSelectedPassengers(newPassengers);
         });
 
         const pickupPopup = new mapboxgl.Popup({
@@ -1091,7 +1132,31 @@ export function CreateRoute({ savedRoutes, onSaveRoute }: CreateRouteProps) {
       const setupPickupCarouselEvents = () => {
         const carouselId = `pickup-carousel-${coordKey.replace(/[.,]/g, "-")}`;
         const container = document.getElementById(carouselId);
-        if (!container) return;
+
+        // Get popup element for hover events
+        const popupEl = pickupPopup.getElement();
+
+        // Toggle buttons are handled by document-level event delegation
+
+        if (!container) {
+          // Still setup hover events for popup
+          if (popupEl) {
+            popupEl.addEventListener("mouseenter", () => {
+              if (closeTimeout) {
+                clearTimeout(closeTimeout);
+                closeTimeout = null;
+              }
+            });
+
+            popupEl.addEventListener("mouseleave", () => {
+              closeTimeout = setTimeout(() => {
+                pickupPopup.remove();
+                isPopupOpen = false;
+              }, 100);
+            });
+          }
+          return;
+        }
 
         const slides = container.querySelectorAll(".carousel-slide");
         const indicator = document.querySelector(
@@ -1102,9 +1167,6 @@ export function CreateRoute({ savedRoutes, onSaveRoute }: CreateRouteProps) {
         );
         const nextBtn = document.querySelector(
           `.carousel-next[data-carousel="${carouselId}"]`
-        );
-        const toggleButtons = container.querySelectorAll(
-          ".passenger-toggle[data-passenger-id]"
         );
 
         const showSlide = (index: number) => {
@@ -1132,22 +1194,7 @@ export function CreateRoute({ savedRoutes, onSaveRoute }: CreateRouteProps) {
           showSlide(newIndex);
         });
 
-        toggleButtons.forEach((button) => {
-          button.addEventListener("click", (e) => {
-            e.stopPropagation();
-            const target = e.currentTarget as HTMLElement;
-            const passengerId = target.getAttribute("data-passenger-id");
-            if (!passengerId) return;
-            const isSelected = target.getAttribute("data-selected") === "true";
-            togglePassenger(passengerId);
-            target.setAttribute("data-selected", isSelected ? "false" : "true");
-            target.textContent = isSelected
-              ? "Select passenger"
-              : "Remove passenger";
-          });
-        });
-
-        const popupEl = pickupPopup.getElement();
+        // Keep popup open when hovering over it
         if (popupEl) {
           popupEl.addEventListener("mouseenter", () => {
             if (closeTimeout) {
@@ -1239,6 +1286,7 @@ export function CreateRoute({ savedRoutes, onSaveRoute }: CreateRouteProps) {
       const createCarouselHTML = () => {
         if (passengerCount === 1) {
           const passenger = passengersAtDest[0];
+          const isSelected = selectedPassengers.includes(passenger.id);
           return `
             <div class="p-2">
               <div class="flex items-center gap-2 mb-2">
@@ -1247,7 +1295,9 @@ export function CreateRoute({ savedRoutes, onSaveRoute }: CreateRouteProps) {
                 </div>
                 <div>
                   <strong class="block">${passenger.name}</strong>
-                  <span class="text-xs text-orange-600 font-medium">DROP-OFF</span>
+                  <span class="text-xs ${
+                    isSelected ? "text-orange-600 font-bold" : "text-orange-600"
+                  }">${isSelected ? "SELECTED DROP-OFF" : "DROP-OFF"}</span>
                 </div>
               </div>
               <p class="text-xs text-gray-600 mb-1"><strong>Destination:</strong> ${
@@ -1256,6 +1306,15 @@ export function CreateRoute({ savedRoutes, onSaveRoute }: CreateRouteProps) {
               <p class="text-xs text-gray-500">${
                 passenger.destination || "N/A"
               }</p>
+              <button class="passenger-toggle px-2 py-1 text-xs rounded border ${
+                isSelected
+                  ? "border-orange-200 text-orange-700 bg-orange-50"
+                  : "border-orange-600 text-orange-600 bg-white"
+              }" data-passenger-id="${passenger.id}" data-selected="${
+                isSelected ? "true" : "false"
+              }">
+                ${isSelected ? "Remove passenger" : "Select passenger"}
+              </button>
             </div>
           `;
         }
@@ -1263,8 +1322,9 @@ export function CreateRoute({ savedRoutes, onSaveRoute }: CreateRouteProps) {
         // Multiple passengers - create carousel
         const carouselId = `carousel-${coordKey.replace(/[.,]/g, "-")}`;
         const passengersHTML = passengersAtDest
-          .map(
-            (passenger, index) => `
+          .map((passenger, index) => {
+            const isSelected = selectedPassengers.includes(passenger.id);
+            return `
           <div class="carousel-slide" data-index="${index}" style="display: ${
               index === 0 ? "block" : "none"
             };">
@@ -1274,7 +1334,9 @@ export function CreateRoute({ savedRoutes, onSaveRoute }: CreateRouteProps) {
               </div>
               <div class="min-w-0 flex-1">
                 <strong class="block truncate">${passenger.name}</strong>
-                <span class="text-xs text-orange-600 font-medium">DROP-OFF</span>
+                <span class="text-xs ${
+                  isSelected ? "text-orange-600 font-bold" : "text-orange-600"
+                }">${isSelected ? "SELECTED DROP-OFF" : "DROP-OFF"}</span>
               </div>
             </div>
             <p class="text-xs text-gray-600 mb-1"><strong>Destination:</strong> ${
@@ -1283,9 +1345,18 @@ export function CreateRoute({ savedRoutes, onSaveRoute }: CreateRouteProps) {
             <p class="text-xs text-gray-500 truncate">${
               passenger.destination || "N/A"
             }</p>
+            <button class="passenger-toggle px-2 py-1 text-xs rounded border ${
+              isSelected
+                ? "border-orange-200 text-orange-700 bg-orange-50"
+                : "border-orange-600 text-orange-600 bg-white"
+            }" data-passenger-id="${passenger.id}" data-selected="${
+              isSelected ? "true" : "false"
+            }">
+              ${isSelected ? "Remove passenger" : "Select passenger"}
+            </button>
           </div>
-        `
-          )
+        `;
+          })
           .join("");
 
         return `
@@ -1321,11 +1392,33 @@ export function CreateRoute({ savedRoutes, onSaveRoute }: CreateRouteProps) {
       let isPopupOpen = false;
 
       const setupCarouselEvents = () => {
-        if (passengerCount <= 1) return;
-
         const carouselId = `carousel-${coordKey.replace(/[.,]/g, "-")}`;
         const container = document.getElementById(carouselId);
-        if (!container) return;
+
+        // Get popup element for hover events
+        const popupEl = destPopup.getElement();
+
+        // Toggle buttons are handled by document-level event delegation
+
+        if (passengerCount <= 1 || !container) {
+          // Still setup hover events for single passenger
+          if (popupEl) {
+            popupEl.addEventListener("mouseenter", () => {
+              if (closeTimeout) {
+                clearTimeout(closeTimeout);
+                closeTimeout = null;
+              }
+            });
+
+            popupEl.addEventListener("mouseleave", () => {
+              closeTimeout = setTimeout(() => {
+                destPopup.remove();
+                isPopupOpen = false;
+              }, 100);
+            });
+          }
+          return;
+        }
 
         const slides = container.querySelectorAll(".carousel-slide");
         const indicator = document.querySelector(
@@ -1364,7 +1457,6 @@ export function CreateRoute({ savedRoutes, onSaveRoute }: CreateRouteProps) {
         });
 
         // Keep popup open when hovering over it
-        const popupEl = destPopup.getElement();
         if (popupEl) {
           popupEl.addEventListener("mouseenter", () => {
             if (closeTimeout) {
