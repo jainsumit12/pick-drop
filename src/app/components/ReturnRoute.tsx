@@ -61,7 +61,6 @@ interface Location {
 }
 
 interface ReturnRouteProps {
-  savedRoutes: SavedRoute[];
   onSaveRoute: (route: SavedRoute) => void;
 }
 
@@ -214,7 +213,7 @@ const convertPassengersToLocations = (
   }));
 };
 
-export function ReturnRoute({ savedRoutes, onSaveRoute }: ReturnRouteProps) {
+export function ReturnRoute({ onSaveRoute }: ReturnRouteProps) {
   const dispatch = useAppDispatch();
   const {
     selectedDate,
@@ -228,6 +227,7 @@ export function ReturnRoute({ savedRoutes, onSaveRoute }: ReturnRouteProps) {
     driverSearch,
     passengerSearch,
   } = useAppSelector((state) => state.filters.return);
+  const storedRoutes = useAppSelector((state) => state.routes.savedRoutes);
 
   const setSelectedDriver = (driver: string | null) => {
     dispatch(setReturnDriver(driver));
@@ -261,7 +261,7 @@ export function ReturnRoute({ savedRoutes, onSaveRoute }: ReturnRouteProps) {
     dispatch(setReturnPassengerSearch(value));
   };
 
-  const returnRoutes = savedRoutes.filter(
+  const returnRoutes = storedRoutes.filter(
     (route) => route.routeType === "return"
   );
 
@@ -365,14 +365,14 @@ export function ReturnRoute({ savedRoutes, onSaveRoute }: ReturnRouteProps) {
   //     .map((route) => route.driverId)
   // );
   const usedPassengerIds = new Set(
-    savedRoutes
+    storedRoutes
       .filter((route) => route.routeType === "return")
-      .flatMap((route) => route.passengerIds)
+      .flatMap((route) => route.passengerIds.map(id => String(id)))
   );
 
   const availableDrivers = drivers;
   const availablePassengers = passengers.filter(
-    (passenger) => !usedPassengerIds.has(passenger.id)
+    (passenger) => !usedPassengerIds.has(String(passenger.id))
   );
 
   const displayDriverCount = savedRouteData?.drivers.length ?? drivers.length;
@@ -786,25 +786,15 @@ export function ReturnRoute({ savedRoutes, onSaveRoute }: ReturnRouteProps) {
                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="white"><path d="M18.92 6.01C18.72 5.42 18.16 5 17.5 5h-11c-.66 0-1.21.42-1.42 1.01L3 12v8c0 .55.45 1 1 1h1c.55 0 1-.45 1-1v-1h12v1c0 .55.45 1 1 1h1c.55 0 1-.45 1-1v-8l-2.08-5.99zM6.5 16c-.83 0-1.5-.67-1.5-1.5S5.67 13 6.5 13s1.5.67 1.5 1.5S7.33 16 6.5 16zm11 0c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zM5 11l1.5-4.5h11L19 11H5z"/></svg>
               </div>
               <div class="min-w-0 flex-1">
-                <strong class="block truncate">${driver.name}</strong>
+                <strong class="block truncate">${driver.name}, ${driver.id}</strong>
                 <span class="text-xs ${
                   isSelected ? "text-blue-600 font-bold" : "text-blue-600"
-                }">${isSelected ? "SELECTED DRIVER" : "DRIVER"}</span>
+                }">${isSelected ? "SELECTED DRIVER" : "DRIVER"}, ${driver.time || ""}</span>
               </div>
             </div>
-            <p class="text-xs text-gray-600 mb-1"><strong>Driver id:</strong> ${
-              driver.id
-            }</p>
-            <p class="text-xs text-gray-600 mb-1"><strong>Time:</strong> ${
-              driver.time
-            }</p>
-            <p class="text-xs text-gray-600 mb-1"><strong>Location:</strong> ${
-              driver.subPoint
-            }</p>
-            <p class="text-xs text-gray-600 mb-1"><strong>Phone:</strong> ${
-              driver.phone
-            }</p>
-            <p class="text-xs text-gray-500 mb-2">${driver.address}</p>
+            <p class="text-xs text-gray-600 mb-1"><strong>Location:</strong> ${driver.subPoint || "N/A"}</p>
+            <p class="text-xs text-gray-600 mb-1"><strong>Phone:</strong> ${driver.phone || "N/A"}</p>
+            <p class="text-xs text-gray-500 mb-2">${driver.address || ""}</p>
             <button class="driver-select px-2 py-1 text-xs rounded border ${
               isSelected
                 ? "border-blue-200 text-blue-600 bg-blue-50"
@@ -970,14 +960,18 @@ export function ReturnRoute({ savedRoutes, onSaveRoute }: ReturnRouteProps) {
           .map((s) => String(s))
           .includes(String(passenger.id));
 
-        // Add work location marker (Building icon)
+        // Format time for display (show only HH:MM)
+        const displayTime = passenger.time ? passenger.time.slice(0, 5) : "";
+
+        // Add work location marker (Building icon) with time label
         const workEl = document.createElement("div");
         workEl.style.display = "flex";
         workEl.style.flexDirection = "column";
         workEl.style.alignItems = "center";
         workEl.style.cursor = "pointer";
         workEl.style.transition = "all 0.2s";
-        workEl.innerHTML = ` <div style="
+        workEl.innerHTML = `
+        <div style="
           width: ${isSelected ? "32px" : "24px"};
           height: ${isSelected ? "32px" : "24px"};
           border-radius: 50%;
@@ -996,9 +990,24 @@ export function ReturnRoute({ savedRoutes, onSaveRoute }: ReturnRouteProps) {
           <svg xmlns="http://www.w3.org/2000/svg" width="${
             isSelected ? "16" : "12"
           }" height="${
-          isSelected ? "16" : "12"
-        }" viewBox="0 0 24 24" fill="white"><path d="M12 7V3H2v18h20V7H12zM6 19H4v-2h2v2zm0-4H4v-2h2v2zm0-4H4V9h2v2zm0-4H4V5h2v2zm4 12H8v-2h2v2zm0-4H8v-2h2v2zm0-4H8V9h2v2zm0-4H8V5h2v2zm10 12h-8v-2h2v-2h-2v-2h2v-2h-2V9h8v10zm-2-8h-2v2h2v-2zm0 4h-2v2h2v-2z"/></svg>
-        </div>`;
+            isSelected ? "16" : "12"
+          }" viewBox="0 0 24 24" fill="white"><path d="M12 7V3H2v18h20V7H12zM6 19H4v-2h2v2zm0-4H4v-2h2v2zm0-4H4V9h2v2zm0-4H4V5h2v2zm4 12H8v-2h2v2zm0-4H8v-2h2v2zm0-4H8V9h2v2zm0-4H8V5h2v2zm10 12h-8v-2h2v-2h-2v-2h2v-2h-2V9h8v10zm-2-8h-2v2h2v-2zm0 4h-2v2h2v-2z"/></svg>
+        </div>
+        ${
+          displayTime
+            ? `<div style="
+          background-color: #036ffc;
+          color: white;
+          font-size: 9px;
+          font-weight: 600;
+          padding: 2px 5px;
+          border-radius: 4px;
+          margin-top: 2px;
+          white-space: nowrap;
+          box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+        ">${displayTime}</div>`
+            : ""
+        }`;
 
         workEl.addEventListener("click", () => {
           workPopup.remove();
@@ -1008,60 +1017,31 @@ export function ReturnRoute({ savedRoutes, onSaveRoute }: ReturnRouteProps) {
         const workPopup = new mapboxgl.Popup({
           closeButton: false,
           closeOnClick: false,
-          maxWidth: "320px",
-        })
-          .setHTML(`<div style="padding: 12px; font-family: Arial, sans-serif; line-height: 1.4; color: #1f2937;">
-            <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 12px;">
-              <div style="width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; flex-shrink: 0;" class="bg-green-600">
-                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="white"><path d="M12 7V3H2v18h20V7H12zM6 19H4v-2h2v2zm0-4H4v-2h2v2zm0-4H4V9h2v2zm0-4H4V5h2v2zm4 12H8v-2h2v2zm0-4H8v-2h2v2zm0-4H8V9h2v2zm0-4H8V5h2v2zm10 12h-8v-2h2v-2h-2v-2h2v-2h-2V9h8v10zm-2-8h-2v2h2v-2zm0 4h-2v2h2v-2z"/></svg>
+        }).setHTML(`
+          <div class="p-2">
+            <div class="flex items-center gap-2 mb-2">
+              <div class="w-8 h-8 rounded-full bg-green-500 flex items-center justify-center">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="white"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>
               </div>
-              <div style="min-width: 0; flex: 1;">
-                <strong style="display: block; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${
-                  passenger.name
-                }</strong>
+              <div>
+                <strong class="block">${passenger.name}, ${passenger.id}</strong>
                 <span class="text-xs ${
                   isSelected ? "text-green-600 font-bold" : "text-green-600"
-                }">${isSelected ? "SELECTED - WORK" : "WORK LOCATION"}</span>
+                }">${isSelected ? "SELECTED PICKUP" : "PICKUP"}, ${passenger.time || ""}</span>
               </div>
             </div>
-            <div style="display: flex; flex-direction: column; gap: 8px; font-size: 12px;">
-              <div style="border: 1px solid #e5e7eb; border-radius: 6px; padding: 8px; display: flex; gap: 8px; align-items: flex-start;">
-                <span style="flex-shrink: 0;">??</span>
-                <div style="min-width: 0; flex: 1;">
-                  <p style="margin: 0; font-weight: 600; color: #374151;">Phone</p>
-                  <p style="margin: 2px 0 0 0; color: #374151;">${
-                    passenger.phone
-                  }</p>
-                </div>
-              </div>
-              <div style="border: 1px solid #e5e7eb; border-radius: 6px; padding: 8px; display: flex; gap: 8px; align-items: flex-start;">
-                <span style="flex-shrink: 0;">??</span>
-                <div style="min-width: 0; flex: 1; overflow: hidden;">
-                  <p style="margin: 0; font-weight: 600; color: #374151;">Pickup Location (Work)</p>
-                  <p style="margin: 2px 0 0 0; color: #374151; font-weight: 500;">${
-                    passenger.subPoint || "N/A"
-                  }</p>
-                  <p style="margin: 2px 0 0 0; color: #6b7280; font-size: 11px; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;">${
-                    passenger.address || ""
-                  }</p>
-                </div>
-              </div>
-              <div style="border: 1px solid #e5e7eb; border-radius: 6px; padding: 8px; display: flex; gap: 8px; align-items: flex-start;">
-                <span style="flex-shrink: 0;">??</span>
-                <div style="min-width: 0; flex: 1; overflow: hidden;">
-                  <p style="margin: 0; font-weight: 600; color: #374151;">Drop-off Location (Home)</p>
-                  <p style="margin: 2px 0 0 0; color: #374151; font-weight: 500;">${
-                    passenger.destinationSubPoint || "N/A"
-                  }</p>
-                  <p style="margin: 2px 0 0 0; color: #6b7280; font-size: 11px; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;">${
-                    passenger.destination || ""
-                  }</p>
-                </div>
-              </div>
-            </div>
+            <p class="text-xs text-gray-600 mb-1"><strong>Location:</strong> ${passenger.subPoint || "N/A"}</p>
+            <p class="text-xs text-gray-600 mb-1"><strong>Phone:</strong> ${passenger.phone}</p>
+            <p class="text-xs text-gray-500 mb-2">${passenger.address || ""}</p>
+            <p class="text-xs text-gray-500 mb-2"><strong>Drop Location:</strong> ${passenger.destination || ""}</p>
+            ${
+              passenger.destinationSubPoint
+                ? `<p class="text-xs text-orange-600 font-medium"><strong>Destination:</strong> ${passenger.destinationSubPoint}</p>`
+                : ""
+            }
             ${
               !isSelected
-                ? '<p class="text-green-500" style="font-size: 11px; font-weight: 500; cursor: pointer; margin-top: 10px; text-align: center;">Click marker to select</p>'
+                ? '<p class="text-xs text-green-600 font-medium cursor-pointer mt-1">Click marker to select</p>'
                 : ""
             }
           </div>
@@ -1304,6 +1284,8 @@ export function ReturnRoute({ savedRoutes, onSaveRoute }: ReturnRouteProps) {
         const isSelected = selectedPassengers
           .map((s) => String(s))
           .includes(String(passenger.id));
+        const displayTime = passenger.time ? passenger.time.slice(0, 5) : "";
+
         const homeEl = document.createElement("div");
         homeEl.style.display = "flex";
         homeEl.style.flexDirection = "column";
@@ -1332,10 +1314,24 @@ export function ReturnRoute({ savedRoutes, onSaveRoute }: ReturnRouteProps) {
             <svg xmlns="http://www.w3.org/2000/svg" width="${
               isSelected ? "14" : "10"
             }" height="${
-          isSelected ? "14" : "10"
-        }" viewBox="0 0 24 24" fill="white"><path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z"/></svg>
+              isSelected ? "14" : "10"
+            }" viewBox="0 0 24 24" fill="white"><path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z"/></svg>
           </div>
-          `;
+          ${
+            displayTime
+              ? `<div style="
+            background-color: #036ffc;
+            color: white;
+            font-size: 9px;
+            font-weight: 600;
+            padding: 2px 5px;
+            border-radius: 4px;
+            margin-top: 2px;
+            white-space: nowrap;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+          ">${displayTime}</div>`
+              : ""
+          }`;
 
         homeEl.addEventListener("click", () => {
           homePopup.remove(); // hover-only popup
@@ -1345,67 +1341,35 @@ export function ReturnRoute({ savedRoutes, onSaveRoute }: ReturnRouteProps) {
         const homePopup = new mapboxgl.Popup({
           closeButton: false,
           closeOnClick: false,
-          maxWidth: "320px",
         }).setHTML(`
-            <div style="padding: 12px; font-family: Arial, sans-serif; line-height: 1.4; color: #1f2937;">
-              <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 12px;">
-                <div style="width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; flex-shrink: 0;" class="bg-green-500">
-                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="white"><path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z"/></svg>
-                </div>
-                <div style="min-width: 0; flex: 1;">
-                  <strong style="display: block; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${
-                    passenger.name
-                  } - <span>${passenger.id}</span></strong>
-                  <span style="font-size: 11px; font-weight: bold;"class="text-xs ${
-                    isSelected ? "text-green-600 font-bold" : "text-green-600"
-                  }">${
-          isSelected ? "SELECTED - HOME" : "HOME DESTINATION"
-        }</span>, <span>${passenger.time}</span>
-                </div>
+          <div class="p-2">
+            <div class="flex items-center gap-2 mb-2">
+              <div class="w-8 h-8 rounded-full bg-green-500 flex items-center justify-center">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="white"><path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z"/></svg>
               </div>
-
-              <div style="display: flex; flex-direction: column; gap: 8px; font-size: 12px;">
-                <div style="border: 1px solid #e5e7eb; border-radius: 6px; padding: 8px; display: flex; gap: 8px; align-items: flex-start;">
-                  <span style="flex-shrink: 0;">??</span>
-                  <div style="min-width: 0; flex: 1;">
-                    <p style="margin: 0; font-weight: 600; color: #374151;">Phone</p>
-                    <p style="margin: 2px 0 0 0; color: #374151;">${
-                      passenger.phone
-                    }</p>
-                  </div>
-                </div>
-                <div style="border: 1px solid #e5e7eb; border-radius: 6px; padding: 8px; display: flex; gap: 8px; align-items: flex-start;">
-                  <span style="flex-shrink: 0;">??</span>
-                  <div style="min-width: 0; flex: 1; overflow: hidden;">
-                    <p style="margin: 0; font-weight: 600; color: #374151;">Pickup Location (Work)</p>
-                    <p style="margin: 2px 0 0 0; color: #374151; font-weight: 500;">${
-                      passenger.subPoint || "N/A"
-                    }</p>
-                    <p style="margin: 2px 0 0 0; color: #6b7280; font-size: 11px; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;">${
-                      passenger.address || ""
-                    }</p>
-                  </div>
-                </div>
-                <div style="border: 1px solid #e5e7eb; border-radius: 6px; padding: 8px; display: flex; gap: 8px; align-items: flex-start;">
-                  <span style="flex-shrink: 0;">??</span>
-                  <div style="min-width: 0; flex: 1; overflow: hidden;">
-                    <p style="margin: 0; font-weight: 600; color: #374151;">Drop-off Location (Home)</p>
-                    <p style="margin: 2px 0 0 0; color: #374151; font-weight: 500;">${
-                      passenger.destinationSubPoint || "N/A"
-                    }</p>
-                    <p style="margin: 2px 0 0 0; color: #6b7280; font-size: 11px; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;">${
-                      passenger.destination || ""
-                    }</p>
-                  </div>
-                </div>
+              <div>
+                <strong class="block">${passenger.name}, ${passenger.id}</strong>
+                <span class="text-xs ${
+                  isSelected ? "text-green-600 font-bold" : "text-green-600"
+                }">${isSelected ? "SELECTED DROP" : "DROP"}, ${passenger.time || ""}</span>
               </div>
-              ${
-                !isSelected
-                  ? '<p class="text-xs text-green-500" style="font-size: 11px; font-weight: 500; cursor: pointer; margin-top: 10px; text-align: center;">Click marker to select</p>'
-                  : ""
-              }
             </div>
-          `);
+            <p class="text-xs text-gray-600 mb-1"><strong>Location:</strong> ${passenger.destinationSubPoint || "N/A"}</p>
+            <p class="text-xs text-gray-600 mb-1"><strong>Phone:</strong> ${passenger.phone}</p>
+            <p class="text-xs text-gray-500 mb-2">${passenger.destination || ""}</p>
+            <p class="text-xs text-gray-500 mb-2"><strong>Pickup Location:</strong> ${passenger.address || ""}</p>
+            ${
+              passenger.subPoint
+                ? `<p class="text-xs text-orange-600 font-medium"><strong>Pickup:</strong> ${passenger.subPoint}</p>`
+                : ""
+            }
+            ${
+              !isSelected
+                ? '<p class="text-xs text-green-600 font-medium cursor-pointer mt-1">Click marker to select</p>'
+                : ""
+            }
+          </div>
+        `);
 
         // Hover handlers to show/hide popup
         homeEl.addEventListener("mouseenter", () => {
@@ -2341,7 +2305,7 @@ export function ReturnRoute({ savedRoutes, onSaveRoute }: ReturnRouteProps) {
                           <div className="flex items-center gap-2 text-xs text-gray-500">
                             <MapPin className="w-3 h-3" />
                             <span>{driver.subPoint}</span>
-                            <span>�</span>
+                            <span>•</span>
                             <Phone className="w-3 h-3" />
                             <span>{driver.phone}</span>
                           </div>
@@ -2477,8 +2441,8 @@ export function ReturnRoute({ savedRoutes, onSaveRoute }: ReturnRouteProps) {
                               </span>
                               <span className="text-xs text-gray-400">
                                 {
-                                  rawPassengerData.filter(
-                                    (p) => p.TIME === time
+                                  availablePassengers.filter(
+                                    (p) => p.time === time
                                   ).length
                                 }
                               </span>
@@ -2493,7 +2457,7 @@ export function ReturnRoute({ savedRoutes, onSaveRoute }: ReturnRouteProps) {
                     timeFilter.length > 0) && (
                     <div className="mt-2 flex items-center justify-between">
                       <p className="text-xs text-gray-500">
-                        {filteredPassengers.length} of {passengers.length}{" "}
+                        {filteredPassengers.length} of {availablePassengers.length}{" "}
                         passengers
                       </p>
                       <button
@@ -2530,7 +2494,7 @@ export function ReturnRoute({ savedRoutes, onSaveRoute }: ReturnRouteProps) {
                       >
                         <input
                           type="checkbox"
-                          checked={selectedPassengers.includes(passenger.id)}
+                          checked={selectedPassengers.map(s => String(s)).includes(String(passenger.id))}
                           onChange={() => togglePassenger(passenger.id)}
                           className="w-4 h-4 text-green-600 rounded focus:ring-green-500"
                         />
@@ -2558,7 +2522,7 @@ export function ReturnRoute({ savedRoutes, onSaveRoute }: ReturnRouteProps) {
                           <div className="flex items-center gap-2 text-xs text-gray-500">
                             <Building2 className="w-3 h-3" />
                             <span>{passenger.subPoint}</span>
-                            <span>?</span>
+                            <span>→</span>
                             <Home className="w-3 h-3" />
                             <span>{passenger.destinationSubPoint}</span>
                           </div>

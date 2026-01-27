@@ -132,7 +132,7 @@ export function Dashboard({ user, onLogout }: DashboardProps) {
       <main className="flex-1 overflow-hidden h-full">
         <Routes>
           <Route path="going" element={<CreateRoute savedRoutes={savedRoutes} onSaveRoute={handleSaveRoute} />} />
-          <Route path="return" element={<ReturnRoute savedRoutes={savedRoutes} onSaveRoute={handleSaveRoute} />} />
+          <Route path="return" element={<ReturnRoute onSaveRoute={handleSaveRoute} />} />
           <Route
             path="saved"
             element={

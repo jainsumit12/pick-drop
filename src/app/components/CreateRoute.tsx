@@ -2326,8 +2326,8 @@ export function CreateRoute({ savedRoutes, onSaveRoute }: CreateRouteProps) {
                               </span>
                               <span className="text-xs text-gray-400">
                                 {
-                                  rawPassengerData.filter(
-                                    (p) => p.TIME === time
+                                  availablePassengers?.filter(
+                                    (p) => p.time === time
                                   )?.length
                                 }
                               </span>
@@ -2342,7 +2342,7 @@ export function CreateRoute({ savedRoutes, onSaveRoute }: CreateRouteProps) {
                     timeFilter?.length > 0) && (
                     <div className="mt-2 flex items-center justify-between">
                       <p className="text-xs text-gray-500">
-                        {filteredPassengers?.length} of {passengers?.length}{" "}
+                        {filteredPassengers?.length} of {availablePassengers?.length}{" "}
                         passengers
                       </p>
                       <button
@@ -2416,7 +2416,7 @@ export function CreateRoute({ savedRoutes, onSaveRoute }: CreateRouteProps) {
                             <span>{passenger.subPoint}</span>
                             {passenger.destinationSubPoint && (
                               <>
-                                <span>?</span>
+                                <span>→</span>
                                 <Home className="w-3 h-3" />
                                 <span>{passenger.destinationSubPoint}</span>
                               </>
