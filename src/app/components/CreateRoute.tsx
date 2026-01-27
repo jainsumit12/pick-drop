@@ -95,7 +95,8 @@ const normalizeTime = (time: string): string => {
   return trimmed;
 };
 
-const normalizeAddress = (address: string): string => address.trim().toLowerCase();
+const normalizeAddress = (address: string): string =>
+  address.trim().toLowerCase();
 
 const formatDateForApi = (date: string): string => {
   const [year, month, day] = date.split("-");
@@ -119,7 +120,7 @@ const toParticipantSnapshot = (location: Location): RouteParticipant => ({
 // Convert rider data to Location format
 const convertRidersToLocations = (
   riders: ShiftDriver[],
-  shift: string,
+  shift: string
 ): Location[] => {
   return riders.flatMap((rider) => {
     const lat = parseCoordinate(rider.HOME_LAT);
@@ -145,7 +146,7 @@ const convertRidersToLocations = (
 // Convert passenger data to Location format
 const convertPassengersToLocations = (
   passengers: ShiftPassenger[],
-  shift: string,
+  shift: string
 ): Location[] => {
   return passengers.flatMap((passenger, index) => {
     const pickupLat = parseCoordinate(passenger.PICKUP_LAT);
@@ -225,7 +226,7 @@ export function CreateRoute({ savedRoutes, onSaveRoute }: CreateRouteProps) {
   };
 
   const goingRoutes = savedRoutes.filter(
-    (route) => route.routeType === "going",
+    (route) => route.routeType === "going"
   );
   const mapContainer = useRef<HTMLDivElement>(null);
   const map = useRef<mapboxgl.Map | null>(null);
@@ -272,7 +273,7 @@ export function CreateRoute({ savedRoutes, onSaveRoute }: CreateRouteProps) {
   const routeTypeLabel = routeType.charAt(0).toUpperCase() + routeType.slice(1);
   const normalizedShift = normalizeShift(selectedShift);
   const savedRouteData = useAppSelector(
-    (state) => state.data.byDate[selectedDate]?.going?.[normalizedShift],
+    (state) => state.data.byDate[selectedDate]?.going?.[normalizedShift]
   );
   const formatLastFetched = (timestamp?: string | null) => {
     if (!timestamp) return null;
@@ -290,8 +291,8 @@ export function CreateRoute({ savedRoutes, onSaveRoute }: CreateRouteProps) {
 
   useEffect(() => {
     const hasReduxData =
-      (savedRouteData?.drivers.length ?? 0) > 0 ||
-      (savedRouteData?.passengers.length ?? 0) > 0;
+      (savedRouteData?.drivers?.length ?? 0) > 0 ||
+      (savedRouteData?.passengers?.length ?? 0) > 0;
 
     if (hasReduxData && savedRouteData) {
       setDriversData(savedRouteData.drivers);
@@ -312,7 +313,7 @@ export function CreateRoute({ savedRoutes, onSaveRoute }: CreateRouteProps) {
   // Get passengers for selected shift
   const passengers = convertPassengersToLocations(
     passengersData,
-    selectedShift,
+    selectedShift
   );
 
   // Filter out drivers and passengers that are already used in saved GOING routes only
@@ -324,7 +325,7 @@ export function CreateRoute({ savedRoutes, onSaveRoute }: CreateRouteProps) {
   const usedPassengerIds = new Set(
     savedRoutes
       .filter((route) => route.routeType === "going")
-      .flatMap((route) => route.passengerIds),
+      .flatMap((route) => route.passengerIds)
   );
 
   const availableDrivers = drivers;
@@ -334,24 +335,24 @@ export function CreateRoute({ savedRoutes, onSaveRoute }: CreateRouteProps) {
     : null;
 
   const baseAvailablePassengers = passengers.filter(
-    (passenger) => !usedPassengerIds.has(passenger.id),
+    (passenger) => !usedPassengerIds.has(passenger.id)
   );
   const availablePassengers = normalizedDriverAddress
     ? baseAvailablePassengers.filter(
         (passenger) =>
-          normalizeAddress(passenger.address) !== normalizedDriverAddress,
+          normalizeAddress(passenger.address) !== normalizedDriverAddress
       )
     : baseAvailablePassengers;
 
   const displayDriverCount =
-    driversData.length > 0
-      ? driversData.length
-      : savedRouteData?.drivers.length ?? drivers.length;
-  const displayPassengerCount = availablePassengers.length;
+    driversData?.length > 0
+      ? driversData?.length
+      : savedRouteData?.drivers?.length ?? drivers?.length;
+  const displayPassengerCount = availablePassengers?.length;
 
   // Extract unique filter options from passenger data
   const rawPassengerData = passengersData.filter(
-    (p) => p.SHIFT === selectedShift,
+    (p) => p.SHIFT === selectedShift
   );
   const pickupCities = [
     "All",
@@ -370,52 +371,52 @@ export function CreateRoute({ savedRoutes, onSaveRoute }: CreateRouteProps) {
   const rawDriverData = driversData.filter((r) => r.SHIFT === selectedShift);
   const driverTimes = Array.from(
     new Set(
-      rawDriverData.map((r) => normalizeTime(r.TIME || "")).filter(Boolean),
-    ),
+      rawDriverData.map((r) => normalizeTime(r.TIME || "")).filter(Boolean)
+    )
   ).sort();
 
   // Filter drivers and passengers based on search
   const filteredDrivers = availableDrivers.filter((d) => {
-    const driverId = String(d.id).toLowerCase();
+    const driverId = String(d.id)?.toLowerCase();
     const matchesSearch =
-      d.name.toLowerCase().includes(driverSearch.toLowerCase()) ||
-      driverId.includes(driverSearch.toLowerCase()) ||
-      d.subPoint.toLowerCase().includes(driverSearch.toLowerCase());
+      d.name?.toLowerCase()?.includes(driverSearch?.toLowerCase()) ||
+      driverId?.includes(driverSearch?.toLowerCase()) ||
+      d.subPoint?.toLowerCase()?.includes(driverSearch?.toLowerCase());
 
     // Find original driver data to check time (same approach as passenger filter)
-    const originalDriver = rawDriverData.find(
+    const originalDriver = rawDriverData?.find(
       (rd) =>
         extractCleanName(rd.DRIVER_NAME) === d.name &&
-        rd.DRIVER_SUBPOINT === d.subPoint,
+        rd.DRIVER_SUBPOINT === d.subPoint
     );
 
     const originalTime = normalizeTime(originalDriver?.TIME || "");
 
     // If no time filter selected, show all drivers that match search
-    if (driverTimeFilter.length === 0) {
+    if (driverTimeFilter?.length === 0) {
       return matchesSearch;
     }
 
     // If time filter selected, require the driver's time to be in the filter (match passenger logic)
     const matchesTime =
       originalTime !== "" &&
-      driverTimeFilter.map((t) => normalizeTime(t)).includes(originalTime);
+      driverTimeFilter?.map((t) => normalizeTime(t))?.includes(originalTime);
 
     return matchesSearch && matchesTime;
   });
-  const filteredPassengers = availablePassengers.filter((p) => {
-    const passengerId = String(p.id).toLowerCase();
+  const filteredPassengers = availablePassengers?.filter((p) => {
+    const passengerId = String(p.id)?.toLowerCase();
     const matchesSearch =
-      p.name.toLowerCase().includes(passengerSearch.toLowerCase()) ||
-      passengerId.includes(passengerSearch.toLowerCase()) ||
-      p.subPoint.toLowerCase().includes(passengerSearch.toLowerCase()) ||
+      p.name?.toLowerCase().includes(passengerSearch?.toLowerCase()) ||
+      passengerId.includes(passengerSearch?.toLowerCase()) ||
+      p.subPoint?.toLowerCase()?.includes(passengerSearch?.toLowerCase()) ||
       (p.destinationSubPoint &&
         p.destinationSubPoint
-          .toLowerCase()
-          .includes(passengerSearch.toLowerCase())) ||
-      p.address.toLowerCase().includes(passengerSearch.toLowerCase()) ||
+          ?.toLowerCase()
+          .includes(passengerSearch?.toLowerCase())) ||
+      p.address?.toLowerCase().includes(passengerSearch?.toLowerCase()) ||
       (p.destination &&
-        p.destination.toLowerCase().includes(passengerSearch.toLowerCase()));
+        p.destination?.toLowerCase().includes(passengerSearch?.toLowerCase()));
 
     const matchesPickupCity =
       pickupCityFilter === "All" || p.subPoint === pickupCityFilter;
@@ -427,12 +428,12 @@ export function CreateRoute({ savedRoutes, onSaveRoute }: CreateRouteProps) {
     const originalPassenger = rawPassengerData.find(
       (pd) =>
         extractCleanName(pd.NAME) === p.name &&
-        pd.PICKUP_SUBPOINT === p.subPoint,
+        pd.PICKUP_SUBPOINT === p.subPoint
     );
 
     const matchesTime =
-      timeFilter.length === 0 ||
-      timeFilter.includes(originalPassenger?.TIME || "");
+      timeFilter?.length === 0 ||
+      timeFilter?.includes(originalPassenger?.TIME || "");
 
     return (
       matchesSearch &&
@@ -443,17 +444,17 @@ export function CreateRoute({ savedRoutes, onSaveRoute }: CreateRouteProps) {
   });
 
   const currentPassengers = availablePassengers.filter((p) =>
-    selectedPassengers.includes(p.id),
+    selectedPassengers.includes(p.id)
   );
 
   useEffect(() => {
-    if (!currentDriver || selectedPassengers.length === 0) return;
+    if (!currentDriver || selectedPassengers?.length === 0) return;
     const nextPassengers = selectedPassengers.filter((id) => {
       const passenger = baseAvailablePassengers.find((p) => p.id === id);
       if (!passenger) return true;
       return normalizeAddress(passenger.address) !== normalizedDriverAddress;
     });
-    if (nextPassengers.length !== selectedPassengers.length) {
+    if (nextPassengers?.length !== selectedPassengers?.length) {
       setSelectedPassengers(nextPassengers);
     }
   }, [
@@ -534,7 +535,7 @@ export function CreateRoute({ savedRoutes, onSaveRoute }: CreateRouteProps) {
 
     // Add driver markers based on filter and checkbox selection
     const driversToShow =
-      checkedDrivers.length > 0
+      checkedDrivers?.length > 0
         ? filteredDrivers.filter((d) => checkedDrivers.includes(d.id))
         : filteredDrivers;
 
@@ -550,7 +551,7 @@ export function CreateRoute({ savedRoutes, onSaveRoute }: CreateRouteProps) {
     driverGroups.forEach((driversAtLocation, coordKey) => {
       const [lng, lat] = coordKey.split(",").map(Number);
       const coordinates: [number, number] = [lng, lat];
-      const driverCount = driversAtLocation.length;
+      const driverCount = driversAtLocation?.length;
 
       if (driverCount === 1) {
         const driver = driversAtLocation[0];
@@ -605,8 +606,8 @@ export function CreateRoute({ savedRoutes, onSaveRoute }: CreateRouteProps) {
                 <span class="text-xs ${
                   isSelected ? "text-blue-600 font-bold" : "text-blue-600"
                 }">${isSelected ? "SELECTED DRIVER" : "DRIVER"}, ${
-                  driver.time
-                }</span>
+          driver.time
+        }</span>
               </div>
             </div>
 
@@ -681,21 +682,21 @@ export function CreateRoute({ savedRoutes, onSaveRoute }: CreateRouteProps) {
             const isSelected = driver.id === selectedDriver;
             return `
           <div class="carousel-slide" data-index="${index}" style="display: ${
-            index === 0 ? "block" : "none"
-          };">
+              index === 0 ? "block" : "none"
+            };">
             <div class="flex items-center gap-2 mb-2">
               <div class="w-8 h-8 rounded-full bg-blue-500 flex items-center justify-center flex-shrink-0">
                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="white"><path d="M18.92 6.01C18.72 5.42 18.16 5 17.5 5h-11c-.66 0-1.21.42-1.42 1.01L3 12v8c0 .55.45 1 1 1h1c.55 0 1-.45 1-1v-1h12v1c0 .55.45 1 1 1h1c.55 0 1-.45 1-1v-8l-2.08-5.99zM6.5 16c-.83 0-1.5-.67-1.5-1.5S5.67 13 6.5 13s1.5.67 1.5 1.5S7.33 16 6.5 16zm11 0c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zM5 11l1.5-4.5h11L19 11H5z"/></svg>
               </div>
               <div class="min-w-0 flex-1">
                 <strong class="block truncate">${driver.name}, ${
-                  driver.id
-                }</strong>
+              driver.id
+            }</strong>
                 <span class="text-xs ${
                   isSelected ? "text-blue-600 font-bold" : "text-blue-600"
                 }">${isSelected ? "SELECTED DRIVER" : "DRIVER"}, ${
-                  driver.time
-                }</span>
+              driver.time
+            }</span>
               </div>
             </div>
 
@@ -756,16 +757,16 @@ export function CreateRoute({ savedRoutes, onSaveRoute }: CreateRouteProps) {
 
         const slides = container.querySelectorAll(".carousel-slide");
         const indicator = document.querySelector(
-          `.carousel-indicator[data-carousel="${carouselId}"]`,
+          `.carousel-indicator[data-carousel="${carouselId}"]`
         );
         const prevBtn = document.querySelector(
-          `.carousel-prev[data-carousel="${carouselId}"]`,
+          `.carousel-prev[data-carousel="${carouselId}"]`
         );
         const nextBtn = document.querySelector(
-          `.carousel-next[data-carousel="${carouselId}"]`,
+          `.carousel-next[data-carousel="${carouselId}"]`
         );
         const selectButtons = container.querySelectorAll(
-          ".driver-select[data-driver-id]",
+          ".driver-select[data-driver-id]"
         );
 
         const showSlide = (index: number) => {
@@ -862,7 +863,7 @@ export function CreateRoute({ savedRoutes, onSaveRoute }: CreateRouteProps) {
     pickupGroups.forEach((passengersAtPickup, coordKey) => {
       const [lng, lat] = coordKey.split(",").map(Number);
       const coordinates: [number, number] = [lng, lat];
-      const passengerCount = passengersAtPickup.length;
+      const passengerCount = passengersAtPickup?.length;
 
       if (passengerCount === 1) {
         const passenger = passengersAtPickup[0];
@@ -899,8 +900,8 @@ export function CreateRoute({ savedRoutes, onSaveRoute }: CreateRouteProps) {
           <svg xmlns="http://www.w3.org/2000/svg" width="${
             isSelected ? "16" : "12"
           }" height="${
-            isSelected ? "16" : "12"
-          }" viewBox="0 0 24 24" fill="white"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>
+          isSelected ? "16" : "12"
+        }" viewBox="0 0 24 24" fill="white"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>
         </div>
         ${
           displayTime
@@ -935,13 +936,13 @@ export function CreateRoute({ savedRoutes, onSaveRoute }: CreateRouteProps) {
               </div>
               <div>
                 <strong class="block">${passenger.name}, ${
-                  passenger.id
-                }</strong>
+          passenger.id
+        }</strong>
                 <span class="text-xs ${
                   isSelected ? "text-green-600 font-bold" : "text-green-600"
                 }">${isSelected ? "SELECTED PICKUP" : "PICKUP"}, ${
-                  passenger.time
-                }</span>
+          passenger.time
+        }</span>
               </div>
             </div>
 
@@ -1009,21 +1010,21 @@ export function CreateRoute({ savedRoutes, onSaveRoute }: CreateRouteProps) {
             const isSelected = selectedPassengers.includes(passenger.id);
             return `
           <div class="carousel-slide" data-index="${index}" style="display: ${
-            index === 0 ? "block" : "none"
-          };">
+              index === 0 ? "block" : "none"
+            };">
             <div class="flex items-center gap-2 mb-2">
               <div class="w-8 h-8 rounded-full bg-green-500 flex items-center justify-center flex-shrink-0">
                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="white"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>
               </div>
               <div class="min-w-0 flex-1">
                 <strong class="block truncate">${passenger.name}, ${
-                  passenger.id
-                }</strong>
+              passenger.id
+            }</strong>
                 <span class="text-xs ${
                   isSelected ? "text-green-600 font-bold" : "text-green-600"
                 }">${isSelected ? "SELECTED PICKUP" : "PICKUP"}, ${
-                  passenger.time
-                }</span>
+              passenger.time
+            }</span>
               </div>
             </div>
 
@@ -1094,16 +1095,16 @@ export function CreateRoute({ savedRoutes, onSaveRoute }: CreateRouteProps) {
 
         const slides = container.querySelectorAll(".carousel-slide");
         const indicator = document.querySelector(
-          `.carousel-indicator[data-carousel="${carouselId}"]`,
+          `.carousel-indicator[data-carousel="${carouselId}"]`
         );
         const prevBtn = document.querySelector(
-          `.carousel-prev[data-carousel="${carouselId}"]`,
+          `.carousel-prev[data-carousel="${carouselId}"]`
         );
         const nextBtn = document.querySelector(
-          `.carousel-next[data-carousel="${carouselId}"]`,
+          `.carousel-next[data-carousel="${carouselId}"]`
         );
         const toggleButtons = container.querySelectorAll(
-          ".passenger-toggle[data-passenger-id]",
+          ".passenger-toggle[data-passenger-id]"
         );
 
         const showSlide = (index: number) => {
@@ -1209,7 +1210,7 @@ export function CreateRoute({ savedRoutes, onSaveRoute }: CreateRouteProps) {
     destinationGroups.forEach((passengersAtDest, coordKey) => {
       const [lng, lat] = coordKey.split(",").map(Number);
       const coordinates: [number, number] = [lng, lat];
-      const passengerCount = passengersAtDest.length;
+      const passengerCount = passengersAtDest?.length;
 
       const destEl = document.createElement("div");
       destEl.style.width = passengerCount > 1 ? "32px" : "28px";
@@ -1265,8 +1266,8 @@ export function CreateRoute({ savedRoutes, onSaveRoute }: CreateRouteProps) {
           .map(
             (passenger, index) => `
           <div class="carousel-slide" data-index="${index}" style="display: ${
-            index === 0 ? "block" : "none"
-          };">
+              index === 0 ? "block" : "none"
+            };">
             <div class="flex items-center gap-2 mb-2">
               <div class="w-8 h-8 rounded-full bg-orange-500 flex items-center justify-center flex-shrink-0">
                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="white"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/></svg>
@@ -1283,7 +1284,7 @@ export function CreateRoute({ savedRoutes, onSaveRoute }: CreateRouteProps) {
               passenger.destination || "N/A"
             }</p>
           </div>
-        `,
+        `
           )
           .join("");
 
@@ -1328,13 +1329,13 @@ export function CreateRoute({ savedRoutes, onSaveRoute }: CreateRouteProps) {
 
         const slides = container.querySelectorAll(".carousel-slide");
         const indicator = document.querySelector(
-          `.carousel-indicator[data-carousel="${carouselId}"]`,
+          `.carousel-indicator[data-carousel="${carouselId}"]`
         );
         const prevBtn = document.querySelector(
-          `.carousel-prev[data-carousel="${carouselId}"]`,
+          `.carousel-prev[data-carousel="${carouselId}"]`
         );
         const nextBtn = document.querySelector(
-          `.carousel-next[data-carousel="${carouselId}"]`,
+          `.carousel-next[data-carousel="${carouselId}"]`
         );
 
         const showSlide = (index: number) => {
@@ -1413,7 +1414,7 @@ export function CreateRoute({ savedRoutes, onSaveRoute }: CreateRouteProps) {
     });
 
     // Auto-fit map to show all markers
-    if (markersRef.current.length > 0) {
+    if (markersRef.current?.length > 0) {
       const bounds = new mapboxgl.LngLatBounds();
 
       // Add checked/filtered driver coordinates
@@ -1421,13 +1422,13 @@ export function CreateRoute({ savedRoutes, onSaveRoute }: CreateRouteProps) {
 
       // Add all filtered passenger pickup coordinates
       filteredPassengers.forEach((passenger) =>
-        bounds.extend(passenger.coordinates),
+        bounds.extend(passenger.coordinates)
       );
 
       map.current.fitBounds(bounds, { padding: 60, maxZoom: 12 });
     }
 
-    if (currentDriver && currentPassengers.length > 0) {
+    if (currentDriver && currentPassengers?.length > 0) {
       calculateRoute();
       setShowBottomPanel(true);
     } else {
@@ -1441,7 +1442,7 @@ export function CreateRoute({ savedRoutes, onSaveRoute }: CreateRouteProps) {
   };
 
   const calculateRoute = async () => {
-    if (!currentDriver || currentPassengers.length === 0 || !map.current)
+    if (!currentDriver || currentPassengers?.length === 0 || !map.current)
       return;
 
     setIsCalculating(true);
@@ -1450,7 +1451,7 @@ export function CreateRoute({ savedRoutes, onSaveRoute }: CreateRouteProps) {
       // Function to calculate distance between two coordinates (Haversine formula)
       const getDistance = (
         coord1: [number, number],
-        coord2: [number, number],
+        coord2: [number, number]
       ): number => {
         const [lon1, lat1] = coord1;
         const [lon2, lat2] = coord2;
@@ -1470,21 +1471,21 @@ export function CreateRoute({ savedRoutes, onSaveRoute }: CreateRouteProps) {
       // Optimize route order using nearest neighbor algorithm
       const optimizeRoute = (
         start: [number, number],
-        locations: [number, number][],
+        locations: [number, number][]
       ): [number, number][] => {
-        if (locations.length === 0) return [];
-        if (locations.length === 1) return locations;
+        if (locations?.length === 0) return [];
+        if (locations?.length === 1) return locations;
 
         const optimized: [number, number][] = [];
         const remaining = [...locations];
         let current = start;
 
-        while (remaining.length > 0) {
+        while (remaining?.length > 0) {
           // Find nearest location to current position
           let nearestIndex = 0;
           let nearestDistance = getDistance(current, remaining[0]);
 
-          for (let i = 1; i < remaining.length; i++) {
+          for (let i = 1; i < remaining?.length; i++) {
             const distance = getDistance(current, remaining[i]);
             if (distance < nearestDistance) {
               nearestDistance = distance;
@@ -1510,17 +1511,17 @@ export function CreateRoute({ savedRoutes, onSaveRoute }: CreateRouteProps) {
       // Optimize pickup order starting from driver location
       const optimizedPickups = optimizeRoute(
         currentDriver.coordinates,
-        pickupCoordinates,
+        pickupCoordinates
       );
 
       // Optimize dropoff order starting from last pickup location
       const lastPickupLocation =
-        optimizedPickups.length > 0
-          ? optimizedPickups[optimizedPickups.length - 1]
+        optimizedPickups?.length > 0
+          ? optimizedPickups[optimizedPickups?.length - 1]
           : currentDriver.coordinates;
       const optimizedDropoffs = optimizeRoute(
         lastPickupLocation,
-        dropoffCoordinates,
+        dropoffCoordinates
       );
 
       // Build complete optimized route
@@ -1537,7 +1538,7 @@ export function CreateRoute({ savedRoutes, onSaveRoute }: CreateRouteProps) {
       const response = await fetch(url);
       const data = await response.json();
 
-      if (data.routes && data.routes.length > 0) {
+      if (data.routes && data.routes?.length > 0) {
         const route = data.routes[0];
         const distanceKm = route.distance / 1000;
         const durationMin = route.duration / 60;
@@ -1551,7 +1552,7 @@ export function CreateRoute({ savedRoutes, onSaveRoute }: CreateRouteProps) {
         // Draw the route on the map
         if (map.current.getSource("route")) {
           (map.current.getSource("route") as mapboxgl.GeoJSONSource).setData(
-            route.geometry,
+            route.geometry
           );
         } else {
           map.current.addSource("route", {
@@ -1578,41 +1579,41 @@ export function CreateRoute({ savedRoutes, onSaveRoute }: CreateRouteProps) {
         // Fit map to show entire route
         const bounds = new mapboxgl.LngLatBounds();
         allWaypoints.forEach((coord) =>
-          bounds.extend(coord as [number, number]),
+          bounds.extend(coord as [number, number])
         );
         map.current.fitBounds(bounds, { padding: 80 });
 
         // Calculate distance saved by optimization
         // Calculate original (non-optimized) distance - simple sequential order
-        if (currentPassengers.length > 1) {
+        if (currentPassengers?.length > 1) {
           let originalDistance = 0;
 
           // Driver to first pickup
           originalDistance += getDistance(
             currentDriver.coordinates,
-            pickupCoordinates[0],
+            pickupCoordinates[0]
           );
 
           // Sequential pickups
-          for (let i = 0; i < pickupCoordinates.length - 1; i++) {
+          for (let i = 0; i < pickupCoordinates?.length - 1; i++) {
             originalDistance += getDistance(
               pickupCoordinates[i],
-              pickupCoordinates[i + 1],
+              pickupCoordinates[i + 1]
             );
           }
 
           // Last pickup to first dropoff
-          if (dropoffCoordinates.length > 0) {
+          if (dropoffCoordinates?.length > 0) {
             originalDistance += getDistance(
-              pickupCoordinates[pickupCoordinates.length - 1],
-              dropoffCoordinates[0],
+              pickupCoordinates[pickupCoordinates?.length - 1],
+              dropoffCoordinates[0]
             );
 
             // Sequential dropoffs
-            for (let i = 0; i < dropoffCoordinates.length - 1; i++) {
+            for (let i = 0; i < dropoffCoordinates?.length - 1; i++) {
               originalDistance += getDistance(
                 dropoffCoordinates[i],
-                dropoffCoordinates[i + 1],
+                dropoffCoordinates[i + 1]
               );
             }
           }
@@ -1623,29 +1624,29 @@ export function CreateRoute({ savedRoutes, onSaveRoute }: CreateRouteProps) {
           // Driver to first optimized pickup
           optimizedDistance += getDistance(
             currentDriver.coordinates,
-            optimizedPickups[0],
+            optimizedPickups[0]
           );
 
           // Optimized pickups
-          for (let i = 0; i < optimizedPickups.length - 1; i++) {
+          for (let i = 0; i < optimizedPickups?.length - 1; i++) {
             optimizedDistance += getDistance(
               optimizedPickups[i],
-              optimizedPickups[i + 1],
+              optimizedPickups[i + 1]
             );
           }
 
           // Last pickup to first dropoff
-          if (optimizedDropoffs.length > 0) {
+          if (optimizedDropoffs?.length > 0) {
             optimizedDistance += getDistance(
-              optimizedPickups[optimizedPickups.length - 1],
-              optimizedDropoffs[0],
+              optimizedPickups[optimizedPickups?.length - 1],
+              optimizedDropoffs[0]
             );
 
             // Optimized dropoffs
-            for (let i = 0; i < optimizedDropoffs.length - 1; i++) {
+            for (let i = 0; i < optimizedDropoffs?.length - 1; i++) {
               optimizedDistance += getDistance(
                 optimizedDropoffs[i],
-                optimizedDropoffs[i + 1],
+                optimizedDropoffs[i + 1]
               );
             }
           }
@@ -1732,7 +1733,7 @@ export function CreateRoute({ savedRoutes, onSaveRoute }: CreateRouteProps) {
         passengersService.getPassengersByShiftDateRoute(
           requestDate,
           routeType,
-          shift,
+          shift
         ),
       ]);
 
@@ -1742,7 +1743,7 @@ export function CreateRoute({ savedRoutes, onSaveRoute }: CreateRouteProps) {
 
       setDriversData(Array.isArray(driversResult) ? driversResult : []);
       setPassengersData(
-        Array.isArray(passengersResult) ? passengersResult : [],
+        Array.isArray(passengersResult) ? passengersResult : []
       );
     } catch (error: any) {
       if (isStaleRequest()) {
@@ -1758,20 +1759,20 @@ export function CreateRoute({ savedRoutes, onSaveRoute }: CreateRouteProps) {
   };
 
   const changeRouteColor = () => {
-    const nextIndex = (routeColorIndex + 1) % routeColors.length;
+    const nextIndex = (routeColorIndex + 1) % routeColors?.length;
     setRouteColorIndex(nextIndex);
 
     if (map.current && map.current.getLayer("route")) {
       map.current.setPaintProperty(
         "route",
         "line-color",
-        routeColors[nextIndex].primary,
+        routeColors[nextIndex].primary
       );
     }
   };
 
   const saveRoute = () => {
-    if (!selectedDriver || selectedPassengers.length === 0 || !routeInfo)
+    if (!selectedDriver || selectedPassengers?.length === 0 || !routeInfo)
       return;
 
     const driverSnapshot = currentDriver
@@ -1781,7 +1782,7 @@ export function CreateRoute({ savedRoutes, onSaveRoute }: CreateRouteProps) {
 
     const newRoute: SavedRoute = {
       id: `route-${Date.now()}`,
-      name: `Route ${goingRoutes.length + 1}`,
+      name: `Route ${goingRoutes?.length + 1}`,
       driverId: selectedDriver,
       passengerIds: selectedPassengers,
       routeInfo: routeInfo,
@@ -1813,7 +1814,7 @@ export function CreateRoute({ savedRoutes, onSaveRoute }: CreateRouteProps) {
 
   const handleResetView = () => {
     if (map.current) {
-      if (markersRef.current.length > 0) {
+      if (markersRef.current?.length > 0) {
         const bounds = new mapboxgl.LngLatBounds();
         drivers.forEach((driver) => bounds.extend(driver.coordinates));
         passengers.forEach((passenger) => bounds.extend(passenger.coordinates));
@@ -1868,9 +1869,7 @@ export function CreateRoute({ savedRoutes, onSaveRoute }: CreateRouteProps) {
                       <button
                         onClick={() => {
                           dispatch(
-                            setGoingDate(
-                              new Date().toISOString().split("T")[0],
-                            ),
+                            setGoingDate(new Date().toISOString().split("T")[0])
                           );
                           setShowDateDropdown(false);
                           clearSelections();
@@ -1889,7 +1888,7 @@ export function CreateRoute({ savedRoutes, onSaveRoute }: CreateRouteProps) {
                           const tomorrow = new Date();
                           tomorrow.setDate(tomorrow.getDate() + 1);
                           dispatch(
-                            setGoingDate(tomorrow.toISOString().split("T")[0]),
+                            setGoingDate(tomorrow.toISOString().split("T")[0])
                           );
                           setShowDateDropdown(false);
                           clearSelections();
@@ -1988,7 +1987,7 @@ export function CreateRoute({ savedRoutes, onSaveRoute }: CreateRouteProps) {
                 Drivers
               </span>
               <span className="sm:hidden font-medium text-blue-600">
-                {checkedDrivers.length > 0 ? checkedDrivers.length : ""}
+                {checkedDrivers?.length > 0 ? checkedDrivers?.length : ""}
               </span>
               <ChevronDown className="w-3 h-3 text-gray-400 flex-shrink-0" />
             </button>
@@ -2016,10 +2015,10 @@ export function CreateRoute({ savedRoutes, onSaveRoute }: CreateRouteProps) {
                       className="w-full text-xs border rounded px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-500 flex items-center justify-between bg-white hover:bg-gray-50"
                     >
                       <span className="truncate">
-                        {driverTimeFilter.length === 0
+                        {driverTimeFilter?.length === 0
                           ? "All Times"
-                          : `${driverTimeFilter.length} time${
-                              driverTimeFilter.length > 1 ? "s" : ""
+                          : `${driverTimeFilter?.length} time${
+                              driverTimeFilter?.length > 1 ? "s" : ""
                             } selected`}
                       </span>
                       <ChevronDown className="w-3 h-3 text-gray-400 flex-shrink-0 ml-1" />
@@ -2031,7 +2030,7 @@ export function CreateRoute({ savedRoutes, onSaveRoute }: CreateRouteProps) {
                           <span className="text-xs font-medium text-gray-700">
                             Select Times
                           </span>
-                          {driverTimeFilter.length > 0 && (
+                          {driverTimeFilter?.length > 0 && (
                             <button
                               onClick={(e) => {
                                 e.stopPropagation();
@@ -2065,8 +2064,8 @@ export function CreateRoute({ savedRoutes, onSaveRoute }: CreateRouteProps) {
                             <span className="text-xs text-gray-400">
                               {
                                 rawDriverData.filter(
-                                  (d) => normalizeTime(d.TIME || "") === time,
-                                ).length
+                                  (d) => normalizeTime(d.TIME || "") === time
+                                )?.length
                               }
                             </span>
                           </label>
@@ -2076,10 +2075,10 @@ export function CreateRoute({ savedRoutes, onSaveRoute }: CreateRouteProps) {
                   </div>
 
                   {/* Active Filter Count */}
-                  {driverTimeFilter.length > 0 && (
+                  {driverTimeFilter?.length > 0 && (
                     <div className="mt-2 flex items-center justify-between">
                       <p className="text-xs text-gray-500">
-                        {filteredDrivers.length} of {availableDrivers.length}{" "}
+                        {filteredDrivers?.length} of {availableDrivers?.length}{" "}
                         drivers
                       </p>
                       <button
@@ -2094,10 +2093,10 @@ export function CreateRoute({ savedRoutes, onSaveRoute }: CreateRouteProps) {
                   )}
 
                   {/* Select All / Clear All for map visibility */}
-                  {filteredDrivers.length > 0 && (
+                  {filteredDrivers?.length > 0 && (
                     <div className="mt-2 flex items-center justify-between">
                       <p className="text-xs text-gray-500">
-                        {checkedDrivers.length} of {filteredDrivers.length} on
+                        {checkedDrivers?.length} of {filteredDrivers?.length} on
                         map
                       </p>
                       <div className="flex gap-2">
@@ -2109,7 +2108,7 @@ export function CreateRoute({ savedRoutes, onSaveRoute }: CreateRouteProps) {
                         >
                           Select all
                         </button>
-                        {checkedDrivers.length > 0 && (
+                        {checkedDrivers?.length > 0 && (
                           <button
                             onClick={() => {
                               setCheckedDrivers([]);
@@ -2132,7 +2131,7 @@ export function CreateRoute({ savedRoutes, onSaveRoute }: CreateRouteProps) {
                     <div className="px-4 py-8 text-center text-sm text-gray-500">
                       {driversError}
                     </div>
-                  ) : filteredDrivers.length === 0 ? (
+                  ) : filteredDrivers?.length === 0 ? (
                     <div className="px-4 py-8 text-center text-sm text-gray-500">
                       No drivers found
                     </div>
@@ -2152,7 +2151,7 @@ export function CreateRoute({ savedRoutes, onSaveRoute }: CreateRouteProps) {
                             setCheckedDrivers((prev) =>
                               prev.includes(driver.id)
                                 ? prev.filter((id) => id !== driver.id)
-                                : [...prev, driver.id],
+                                : [...prev, driver.id]
                             );
                           }}
                           className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500 cursor-pointer"
@@ -2216,7 +2215,9 @@ export function CreateRoute({ savedRoutes, onSaveRoute }: CreateRouteProps) {
                 Passengers
               </span>
               <span className="sm:hidden font-medium text-green-600">
-                {selectedPassengers.length > 0 ? selectedPassengers.length : ""}
+                {selectedPassengers?.length > 0
+                  ? selectedPassengers?.length
+                  : ""}
               </span>
               <ChevronDown className="w-3 h-3 text-gray-400 flex-shrink-0" />
             </button>
@@ -2270,10 +2271,10 @@ export function CreateRoute({ savedRoutes, onSaveRoute }: CreateRouteProps) {
                       className="w-full text-xs border rounded px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-green-500 flex items-center justify-between bg-white hover:bg-gray-50"
                     >
                       <span className="truncate">
-                        {timeFilter.length === 0
+                        {timeFilter?.length === 0
                           ? "All Times"
-                          : `${timeFilter.length} time${
-                              timeFilter.length > 1 ? "s" : ""
+                          : `${timeFilter?.length} time${
+                              timeFilter?.length > 1 ? "s" : ""
                             } selected`}
                       </span>
                       <ChevronDown className="w-3 h-3 text-gray-400 flex-shrink-0 ml-1" />
@@ -2285,7 +2286,7 @@ export function CreateRoute({ savedRoutes, onSaveRoute }: CreateRouteProps) {
                           <span className="text-xs font-medium text-gray-700">
                             Select Times
                           </span>
-                          {timeFilter.length > 0 && (
+                          {timeFilter?.length > 0 && (
                             <button
                               onClick={(e) => {
                                 e.stopPropagation();
@@ -2312,7 +2313,7 @@ export function CreateRoute({ savedRoutes, onSaveRoute }: CreateRouteProps) {
                                   e.stopPropagation();
                                   if (timeFilter.includes(time)) {
                                     setTimeFilter(
-                                      timeFilter.filter((t) => t !== time),
+                                      timeFilter.filter((t) => t !== time)
                                     );
                                   } else {
                                     setTimeFilter([...timeFilter, time]);
@@ -2326,8 +2327,8 @@ export function CreateRoute({ savedRoutes, onSaveRoute }: CreateRouteProps) {
                               <span className="text-xs text-gray-400">
                                 {
                                   rawPassengerData.filter(
-                                    (p) => p.TIME === time,
-                                  ).length
+                                    (p) => p.TIME === time
+                                  )?.length
                                 }
                               </span>
                             </label>
@@ -2338,10 +2339,10 @@ export function CreateRoute({ savedRoutes, onSaveRoute }: CreateRouteProps) {
                   {/* Active Filter Count */}
                   {(pickupCityFilter !== "All" ||
                     destinationCityFilter !== "All" ||
-                    timeFilter.length > 0) && (
+                    timeFilter?.length > 0) && (
                     <div className="mt-2 flex items-center justify-between">
                       <p className="text-xs text-gray-500">
-                        {filteredPassengers.length} of {passengers.length}{" "}
+                        {filteredPassengers?.length} of {passengers?.length}{" "}
                         passengers
                       </p>
                       <button
@@ -2366,7 +2367,7 @@ export function CreateRoute({ savedRoutes, onSaveRoute }: CreateRouteProps) {
                     <div className="px-4 py-8 text-center text-sm text-gray-500">
                       {passengersError}
                     </div>
-                  ) : filteredPassengers.length === 0 ? (
+                  ) : filteredPassengers?.length === 0 ? (
                     <div className="px-4 py-8 text-center text-sm text-gray-500">
                       No passengers found
                     </div>
@@ -2417,9 +2418,7 @@ export function CreateRoute({ savedRoutes, onSaveRoute }: CreateRouteProps) {
                               <>
                                 <span>?</span>
                                 <Home className="w-3 h-3" />
-                                <span>
-                                  {passenger.destinationSubPoint}
-                                </span>
+                                <span>{passenger.destinationSubPoint}</span>
                               </>
                             )}
                           </div>
@@ -2470,14 +2469,16 @@ export function CreateRoute({ savedRoutes, onSaveRoute }: CreateRouteProps) {
                     date: selectedDate,
                     drivers: driversData,
                     passengers: passengersData,
-                  }),
+                  })
                 );
                 setSaveDialogMessage(
-                  `Data saved for ${selectedShift} shift (Going route)`,
+                  `Data saved for ${selectedShift} shift (Going route)`
                 );
                 setShowSaveDialog(true);
               }}
-              disabled={driversData.length === 0 && passengersData.length === 0}
+              disabled={
+                driversData?.length === 0 && passengersData?.length === 0
+              }
               className="h-8 sm:h-9 px-2 sm:px-3"
             >
               <Download className="w-4 h-4" />
@@ -2542,7 +2543,7 @@ export function CreateRoute({ savedRoutes, onSaveRoute }: CreateRouteProps) {
           </div>
         )}
 
-        {!selectedDriver && selectedPassengers.length === 0 && (
+        {!selectedDriver && selectedPassengers?.length === 0 && (
           <div className="absolute top-6 left-1/2 -translate-x-1/2 bg-white px-6 py-3 rounded-lg shadow-lg z-10 border">
             <p className="text-sm text-gray-600 flex items-center gap-2">
               <MapPin className="w-4 h-4" />
@@ -2581,7 +2582,7 @@ export function CreateRoute({ savedRoutes, onSaveRoute }: CreateRouteProps) {
                     <div>
                       <p className="text-xs text-gray-500">Passengers</p>
                       <p className="font-medium text-sm">
-                        {selectedPassengers.length} selected
+                        {selectedPassengers?.length} selected
                       </p>
                     </div>
                   </div>
@@ -2738,10 +2739,9 @@ function ConfirmationDialog({
         </div>
       </div>
     </div>,
-    document.body,
+    document.body
   );
 }
-
 
 interface InfoDialogProps {
   open: boolean;

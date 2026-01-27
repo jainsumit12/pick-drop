@@ -135,7 +135,7 @@ const generateUniqueColor = (index: number, total: number): string => {
 // Convert rider data to Location format
 const convertRidersToLocations = (
   riders: ShiftDriver[],
-  shift: string,
+  shift: string
 ): Location[] => {
   return riders.flatMap((rider) => {
     const lat = parseCoordinate(rider.HOME_LAT);
@@ -162,7 +162,7 @@ const convertRidersToLocations = (
 // For Return Route: PICKUP_LOCATION = Factory (current), DROP_LOCATION = Home (destination)
 const convertPassengersToLocations = (
   passengers: ShiftPassenger[],
-  shift: string,
+  shift: string
 ): Location[] => {
   const filteredPassengers = passengers.flatMap((passenger) => {
     const pickupLat = parseCoordinate(passenger.PICKUP_LAT);
@@ -262,12 +262,15 @@ export function ReturnRoute({ savedRoutes, onSaveRoute }: ReturnRouteProps) {
   };
 
   const returnRoutes = savedRoutes.filter(
-    (route) => route.routeType === "return",
+    (route) => route.routeType === "return"
   );
 
   const mapContainer = useRef<HTMLDivElement>(null);
   const map = useRef<mapboxgl.Map | null>(null);
   const markersRef = useRef<mapboxgl.Marker[]>([]);
+  const selectedPassengersRef = useRef<string[]>(selectedPassengers);
+  // Keep ref updated with latest selectedPassengers
+  selectedPassengersRef.current = selectedPassengers;
   const [routeInfo, setRouteInfo] = useState<RouteInfo | null>(null);
   const [isCalculating, setIsCalculating] = useState(false);
   const [routeColorIndex, setRouteColorIndex] = useState(0);
@@ -310,7 +313,7 @@ export function ReturnRoute({ savedRoutes, onSaveRoute }: ReturnRouteProps) {
   const routeTypeLabel = routeType.charAt(0).toUpperCase() + routeType.slice(1);
   const normalizedShift = normalizeShift(selectedShift);
   const savedRouteData = useAppSelector(
-    (state) => state.data.byDate[selectedDate]?.return?.[normalizedShift],
+    (state) => state.data.byDate[selectedDate]?.return?.[normalizedShift]
   );
 
   const formatLastFetched = (timestamp?: string | null) => {
@@ -352,7 +355,7 @@ export function ReturnRoute({ savedRoutes, onSaveRoute }: ReturnRouteProps) {
   // Get passengers for selected shift
   const passengers = convertPassengersToLocations(
     passengersData,
-    selectedShift,
+    selectedShift
   );
 
   // Filter out drivers and passengers that are already used in saved RETURN routes only
@@ -364,12 +367,12 @@ export function ReturnRoute({ savedRoutes, onSaveRoute }: ReturnRouteProps) {
   const usedPassengerIds = new Set(
     savedRoutes
       .filter((route) => route.routeType === "return")
-      .flatMap((route) => route.passengerIds),
+      .flatMap((route) => route.passengerIds)
   );
 
   const availableDrivers = drivers;
   const availablePassengers = passengers.filter(
-    (passenger) => !usedPassengerIds.has(passenger.id),
+    (passenger) => !usedPassengerIds.has(passenger.id)
   );
 
   const displayDriverCount = savedRouteData?.drivers.length ?? drivers.length;
@@ -377,7 +380,7 @@ export function ReturnRoute({ savedRoutes, onSaveRoute }: ReturnRouteProps) {
 
   // Extract unique filter options from passenger data (for Return: factory locations are "pickup", home locations are "destination")
   const rawPassengerData = passengersData.filter(
-    (p) => p.SHIFT === selectedShift,
+    (p) => p.SHIFT === selectedShift
   );
   const pickupCities = [
     "All",
@@ -396,55 +399,55 @@ export function ReturnRoute({ savedRoutes, onSaveRoute }: ReturnRouteProps) {
   const rawDriverData = driversData.filter((r) => r.SHIFT === selectedShift);
   const driverTimes = Array.from(
     new Set(
-      rawDriverData.map((r) => normalizeTime(r.TIME || "")).filter(Boolean),
-    ),
+      rawDriverData.map((r) => normalizeTime(r.TIME || "")).filter(Boolean)
+    )
   ).sort();
 
   // Filter drivers and passengers based on search
   const filteredDrivers = availableDrivers.filter((d) => {
-    const driverId = String(d.id).toLowerCase();
+    const driverId = String(d.id)?.toLowerCase();
     const matchesSearch =
-      d.name.toLowerCase().includes(driverSearch.toLowerCase()) ||
-      driverId.includes(driverSearch.toLowerCase()) ||
-      d.subPoint.toLowerCase().includes(driverSearch.toLowerCase());
+      d.name?.toLowerCase().includes(driverSearch?.toLowerCase()) ||
+      driverId.includes(driverSearch?.toLowerCase()) ||
+      d.subPoint?.toLowerCase().includes(driverSearch?.toLowerCase());
 
     // Find original driver data to check time
     const originalDriver = rawDriverData.find(
       (rd) =>
-        extractCleanName(rd.DRIVER_NAME).toLowerCase() ===
-          d.name.toLowerCase() &&
-        (rd.DRIVER_SUBPOINT || rd.HOME_LOCATION || "").toLowerCase() ===
-          d.subPoint.toLowerCase(),
+        extractCleanName(rd.DRIVER_NAME)?.toLowerCase() ===
+          d.name?.toLowerCase() &&
+        (rd.DRIVER_SUBPOINT || rd.HOME_LOCATION || "")?.toLowerCase() ===
+          d.subPoint?.toLowerCase()
     );
     const originalTime = normalizeTime(originalDriver?.TIME || "");
 
     // If no time filter selected, show all drivers
-    if (driverTimeFilter.length === 0) {
+    if (driverTimeFilter?.length === 0) {
       return matchesSearch;
     }
 
     // If time filter selected, require matching time (normalized)
-    const normalizedFilter = driverTimeFilter.map((t) => normalizeTime(t));
+    const normalizedFilter = driverTimeFilter?.map((t) => normalizeTime(t));
     const matchesTime =
-      originalTime !== "" && normalizedFilter.includes(originalTime);
+      originalTime !== "" && normalizedFilter?.includes(originalTime);
 
     return matchesSearch && matchesTime;
   });
 
   // Apply all filters to passengers
   const filteredPassengers = availablePassengers.filter((p) => {
-    const passengerId = String(p.id).toLowerCase();
+    const passengerId = String(p.id)?.toLowerCase();
     const matchesSearch =
-      p.name.toLowerCase().includes(passengerSearch.toLowerCase()) ||
-      passengerId.includes(passengerSearch.toLowerCase()) ||
-      p.subPoint.toLowerCase().includes(passengerSearch.toLowerCase()) ||
+      p.name?.toLowerCase().includes(passengerSearch?.toLowerCase()) ||
+      passengerId.includes(passengerSearch?.toLowerCase()) ||
+      p.subPoint?.toLowerCase().includes(passengerSearch?.toLowerCase()) ||
       (p.destinationSubPoint &&
         p.destinationSubPoint
-          .toLowerCase()
-          .includes(passengerSearch.toLowerCase())) ||
-      p.address.toLowerCase().includes(passengerSearch.toLowerCase()) ||
+          ?.toLowerCase()
+          ?.includes(passengerSearch?.toLowerCase())) ||
+      p.address?.toLowerCase().includes(passengerSearch?.toLowerCase()) ||
       (p.destination &&
-        p.destination.toLowerCase().includes(passengerSearch.toLowerCase()));
+        p.destination?.toLowerCase().includes(passengerSearch?.toLowerCase()));
 
     const matchesPickupCity =
       pickupCityFilter === "All" || p.subPoint === pickupCityFilter; // Factory location (PICKUP in raw data)
@@ -456,7 +459,7 @@ export function ReturnRoute({ savedRoutes, onSaveRoute }: ReturnRouteProps) {
     const originalPassenger = rawPassengerData.find(
       (pd) =>
         extractCleanName(pd.NAME) === p.name &&
-        pd.PICKUP_SUBPOINT === p.subPoint,
+        pd.PICKUP_SUBPOINT === p.subPoint
     );
 
     const matchesTime =
@@ -474,7 +477,7 @@ export function ReturnRoute({ savedRoutes, onSaveRoute }: ReturnRouteProps) {
   // Get selected driver and passengers
   const currentDriver = availableDrivers.find((d) => d.id === selectedDriver);
   const currentPassengers = availablePassengers.filter((p) =>
-    selectedPassengers.includes(p.id),
+    selectedPassengers.map((s) => String(s)).includes(String(p.id))
   );
 
   useEffect(() => {
@@ -514,6 +517,86 @@ export function ReturnRoute({ savedRoutes, onSaveRoute }: ReturnRouteProps) {
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
+
+  // Document-level handler for passenger selection buttons in popups
+  useEffect(() => {
+    const handlePassengerButtonClick = (event: MouseEvent) => {
+      const target = event.target as HTMLElement;
+
+      // Handle individual passenger toggle button
+      const toggleBtn = target.closest(
+        ".passenger-toggle[data-passenger-id]"
+      ) as HTMLElement;
+      if (toggleBtn) {
+        event.stopPropagation();
+        event.preventDefault();
+        const passengerId = toggleBtn.getAttribute("data-passenger-id");
+        if (passengerId) {
+          const current = selectedPassengersRef.current.map((id) => String(id));
+          const newPassengers = current.includes(passengerId)
+            ? current.filter((id) => id !== passengerId)
+            : [...current, passengerId];
+          dispatch(setReturnPassengers(newPassengers));
+        }
+        return;
+      }
+
+      // Handle "Select all" button (work location)
+      const selectAllBtn = target.closest(
+        ".select-all-passengers[data-passenger-ids]"
+      ) as HTMLElement;
+      if (selectAllBtn) {
+        event.stopPropagation();
+        event.preventDefault();
+        const passengerIdsStr = selectAllBtn.getAttribute("data-passenger-ids");
+        if (!passengerIdsStr) return;
+        const passengerIds = passengerIdsStr.split(",");
+        const current = selectedPassengersRef.current.map((id) => String(id));
+        const allSelected = passengerIds.every((id) => current.includes(id));
+
+        if (allSelected) {
+          const newPassengers = current.filter(
+            (id) => !passengerIds.includes(id)
+          );
+          dispatch(setReturnPassengers(newPassengers));
+        } else {
+          const newPassengers = [...new Set([...current, ...passengerIds])];
+          dispatch(setReturnPassengers(newPassengers));
+        }
+        return;
+      }
+
+      // Handle "Select all" button (home location)
+      const selectAllHomeBtn = target.closest(
+        ".select-all-home-passengers[data-passenger-ids]"
+      ) as HTMLElement;
+      if (selectAllHomeBtn) {
+        event.stopPropagation();
+        event.preventDefault();
+        const passengerIdsStr =
+          selectAllHomeBtn.getAttribute("data-passenger-ids");
+        if (!passengerIdsStr) return;
+        const passengerIds = passengerIdsStr.split(",");
+        const current = selectedPassengersRef.current.map((id) => String(id));
+        const allSelected = passengerIds.every((id) => current.includes(id));
+
+        if (allSelected) {
+          const newPassengers = current.filter(
+            (id) => !passengerIds.includes(id)
+          );
+          dispatch(setReturnPassengers(newPassengers));
+        } else {
+          const newPassengers = [...new Set([...current, ...passengerIds])];
+          dispatch(setReturnPassengers(newPassengers));
+        }
+        return;
+      }
+    };
+
+    document.addEventListener("click", handlePassengerButtonClick);
+    return () =>
+      document.removeEventListener("click", handlePassengerButtonClick);
+  }, [dispatch]);
 
   useEffect(() => {
     if (!map.current) return;
@@ -621,8 +704,8 @@ export function ReturnRoute({ savedRoutes, onSaveRoute }: ReturnRouteProps) {
                 <span class="text-xs ${
                   isSelected ? "text-blue-600 font-bold" : "text-blue-600"
                 }">${isSelected ? "SELECTED DRIVER" : "DRIVER"}, ${
-                  driver.time
-                }</span>
+          driver.time
+        }</span>
               </div>
             </div>
             <p class="text-xs text-gray-600 mb-1"><strong>Location:</strong> ${
@@ -696,8 +779,8 @@ export function ReturnRoute({ savedRoutes, onSaveRoute }: ReturnRouteProps) {
             const isSelected = driver.id === selectedDriver;
             return `
           <div class="carousel-slide" data-index="${index}" style="display: ${
-            index === 0 ? "block" : "none"
-          };">
+              index === 0 ? "block" : "none"
+            };">
             <div class="flex items-center gap-2 mb-2">
               <div class="w-8 h-8 rounded-full bg-blue-500 flex items-center justify-center flex-shrink-0">
                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="white"><path d="M18.92 6.01C18.72 5.42 18.16 5 17.5 5h-11c-.66 0-1.21.42-1.42 1.01L3 12v8c0 .55.45 1 1 1h1c.55 0 1-.45 1-1v-1h12v1c0 .55.45 1 1 1h1c.55 0 1-.45 1-1v-8l-2.08-5.99zM6.5 16c-.83 0-1.5-.67-1.5-1.5S5.67 13 6.5 13s1.5.67 1.5 1.5S7.33 16 6.5 16zm11 0c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zM5 11l1.5-4.5h11L19 11H5z"/></svg>
@@ -772,16 +855,16 @@ export function ReturnRoute({ savedRoutes, onSaveRoute }: ReturnRouteProps) {
 
         const slides = container.querySelectorAll(".carousel-slide");
         const indicator = document.querySelector(
-          `.carousel-indicator[data-carousel="${carouselId}"]`,
+          `.carousel-indicator[data-carousel="${carouselId}"]`
         );
         const prevBtn = document.querySelector(
-          `.carousel-prev[data-carousel="${carouselId}"]`,
+          `.carousel-prev[data-carousel="${carouselId}"]`
         );
         const nextBtn = document.querySelector(
-          `.carousel-next[data-carousel="${carouselId}"]`,
+          `.carousel-next[data-carousel="${carouselId}"]`
         );
         const selectButtons = container.querySelectorAll(
-          ".driver-select[data-driver-id]",
+          ".driver-select[data-driver-id]"
         );
 
         const showSlide = (index: number) => {
@@ -883,20 +966,18 @@ export function ReturnRoute({ savedRoutes, onSaveRoute }: ReturnRouteProps) {
 
       if (passengerCount === 1) {
         const passenger = passengersAtWork[0];
-        const isSelected = selectedPassengers.includes(passenger.id);
+        const isSelected = selectedPassengers
+          .map((s) => String(s))
+          .includes(String(passenger.id));
 
-        // Format time for display (show only HH:MM)
-        const displayTime = passenger.time ? passenger.time.slice(0, 5) : "";
-
-        // Add work location marker (Building icon) with time label
+        // Add work location marker (Building icon)
         const workEl = document.createElement("div");
         workEl.style.display = "flex";
         workEl.style.flexDirection = "column";
         workEl.style.alignItems = "center";
         workEl.style.cursor = "pointer";
         workEl.style.transition = "all 0.2s";
-        workEl.innerHTML = `
-        <div style="
+        workEl.innerHTML = ` <div style="
           width: ${isSelected ? "32px" : "24px"};
           height: ${isSelected ? "32px" : "24px"};
           border-radius: 50%;
@@ -915,28 +996,12 @@ export function ReturnRoute({ savedRoutes, onSaveRoute }: ReturnRouteProps) {
           <svg xmlns="http://www.w3.org/2000/svg" width="${
             isSelected ? "16" : "12"
           }" height="${
-            isSelected ? "16" : "12"
-          }" viewBox="0 0 24 24" fill="white"><path d="M12 7V3H2v18h20V7H12zM6 19H4v-2h2v2zm0-4H4v-2h2v2zm0-4H4V9h2v2zm0-4H4V5h2v2zm4 12H8v-2h2v2zm0-4H8v-2h2v2zm0-4H8V9h2v2zm0-4H8V5h2v2zm10 12h-8v-2h2v-2h-2v-2h2v-2h-2V9h8v10zm-2-8h-2v2h2v-2zm0 4h-2v2h2v-2z"/></svg>
-        </div>
-        ${
-          displayTime
-            ? `<div style="
-          background-color: #036ffc;
-          color: white;
-          font-size: 9px;
-          font-weight: 600;
-          padding: 2px 5px;
-          border-radius: 4px;
-          margin-top: 2px;
-          white-space: nowrap;
-          box-shadow: 0 1px 3px rgba(0,0,0,0.3);
-        ">${displayTime}</div>`
-            : ""
-        }`;
+          isSelected ? "16" : "12"
+        }" viewBox="0 0 24 24" fill="white"><path d="M12 7V3H2v18h20V7H12zM6 19H4v-2h2v2zm0-4H4v-2h2v2zm0-4H4V9h2v2zm0-4H4V5h2v2zm4 12H8v-2h2v2zm0-4H8v-2h2v2zm0-4H8V9h2v2zm0-4H8V5h2v2zm10 12h-8v-2h2v-2h-2v-2h2v-2h-2V9h8v10zm-2-8h-2v2h2v-2zm0 4h-2v2h2v-2z"/></svg>
+        </div>`;
 
-        // Click handler to toggle passenger selection
         workEl.addEventListener("click", () => {
-          workPopup.remove(); // hover-only popup
+          workPopup.remove();
           togglePassenger(passenger.id);
         });
 
@@ -944,8 +1009,8 @@ export function ReturnRoute({ savedRoutes, onSaveRoute }: ReturnRouteProps) {
           closeButton: false,
           closeOnClick: false,
           maxWidth: "320px",
-        }).setHTML(`
-          <div style="padding: 12px; font-family: Arial, sans-serif; line-height: 1.4; color: #1f2937;">
+        })
+          .setHTML(`<div style="padding: 12px; font-family: Arial, sans-serif; line-height: 1.4; color: #1f2937;">
             <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 12px;">
               <div style="width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; flex-shrink: 0;" class="bg-green-600">
                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="white"><path d="M12 7V3H2v18h20V7H12zM6 19H4v-2h2v2zm0-4H4v-2h2v2zm0-4H4V9h2v2zm0-4H4V5h2v2zm4 12H8v-2h2v2zm0-4H8v-2h2v2zm0-4H8V9h2v2zm0-4H8V5h2v2zm10 12h-8v-2h2v-2h-2v-2h2v-2h-2V9h8v10zm-2-8h-2v2h2v-2zm0 4h-2v2h2v-2z"/></svg>
@@ -1037,33 +1102,44 @@ export function ReturnRoute({ savedRoutes, onSaveRoute }: ReturnRouteProps) {
       `;
 
       const createWorkCarouselHTML = () => {
-        const carouselId = `return-work-carousel-${coordKey.replace(/[.,]/g, "-")}`;
+        const carouselId = `return-work-carousel-${coordKey.replace(
+          /[.,]/g,
+          "-"
+        )}`;
+        const allPassengerIds = passengersAtWork.map((p) => String(p.id));
+        const allSelected = allPassengerIds.every((id) =>
+          selectedPassengers.map((s) => String(s)).includes(id)
+        );
         const passengersHTML = passengersAtWork
           .map((passenger, index) => {
-            const isSelected = selectedPassengers.includes(passenger.id);
+            const isSelected = selectedPassengers
+              .map((s) => String(s))
+              .includes(String(passenger.id));
             return `
           <div class="carousel-slide" data-index="${index}" style="display: ${
-            index === 0 ? "block" : "none"
-          };">
+              index === 0 ? "block" : "none"
+            };">
             <div class="flex items-center gap-2 mb-2">
               <div class="w-8 h-8 rounded-full bg-green-500 flex items-center justify-center flex-shrink-0">
                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="white"><path d="M12 7V3H2v18h20V7H12zM6 19H4v-2h2v2zm0-4H4v-2h2v2zm0-4H4V9h2v2zm0-4H4V5h2v2zm4 12H8v-2h2v2zm0-4H8v-2h2v2zm0-4H8V9h2v2zm0-4H8V5h2v2zm10 12h-8v-2h2v-2h-2v-2h2v-2h-2V9h8v10zm-2-8h-2v2h2v-2zm0 4h-2v2h2v-2z"/></svg>
               </div>
               <div class="min-w-0 flex-1">
                 <strong class="block truncate">${passenger.name}, ${
-                  passenger.id
-                }</strong>
+              passenger.id
+            }</strong>
                 <span class="text-xs ${
                   isSelected ? "text-green-600 font-bold" : "text-green-600"
                 }">${isSelected ? "SELECTED - WORK" : "WORK LOCATION"}, ${
-                  passenger.time || ""
-                }</span>
+              passenger.time || ""
+            }</span>
               </div>
             </div>
             <p class="text-xs text-gray-600 mb-1"><strong>Pickup:</strong> ${
               passenger.subPoint || "N/A"
             }</p>
-            <p class="text-xs text-gray-500 truncate">${passenger.address || ""}</p>
+            <p class="text-xs text-gray-500 truncate">${
+              passenger.address || ""
+            }</p>
             <button class="passenger-toggle px-2 py-1 text-xs rounded border ${
               isSelected
                 ? "border-green-200 text-green-700 bg-green-50"
@@ -1082,6 +1158,15 @@ export function ReturnRoute({ savedRoutes, onSaveRoute }: ReturnRouteProps) {
           <div class="p-2" style="min-width: 260px;">
             <div class="flex items-center justify-between mb-2 pb-2 border-b border-gray-200">
               <span class="text-xs font-bold text-green-600">${passengerCount} Passengers at this location</span>
+              <button class="select-all-passengers px-2 py-1 text-xs rounded border ${
+                allSelected
+                  ? "border-green-200 text-green-700 bg-green-50"
+                  : "border-green-600 text-green-600 bg-white hover:bg-green-50"
+              }" data-passenger-ids="${allPassengerIds.join(
+          ","
+        )}" data-all-selected="${allSelected}">
+                ${allSelected ? "Deselect all" : "Select all"}
+              </button>
             </div>
             <div id="${carouselId}" class="carousel-container">
               ${passengersHTML}
@@ -1110,22 +1195,22 @@ export function ReturnRoute({ savedRoutes, onSaveRoute }: ReturnRouteProps) {
       let isPopupOpen = false;
 
       const setupWorkCarouselEvents = () => {
-        const carouselId = `return-work-carousel-${coordKey.replace(/[.,]/g, "-")}`;
+        const carouselId = `return-work-carousel-${coordKey.replace(
+          /[.,]/g,
+          "-"
+        )}`;
         const container = document.getElementById(carouselId);
         if (!container) return;
 
         const slides = container.querySelectorAll(".carousel-slide");
         const indicator = document.querySelector(
-          `.carousel-indicator[data-carousel="${carouselId}"]`,
+          `.carousel-indicator[data-carousel="${carouselId}"]`
         );
         const prevBtn = document.querySelector(
-          `.carousel-prev[data-carousel="${carouselId}"]`,
+          `.carousel-prev[data-carousel="${carouselId}"]`
         );
         const nextBtn = document.querySelector(
-          `.carousel-next[data-carousel="${carouselId}"]`,
-        );
-        const toggleButtons = container.querySelectorAll(
-          ".passenger-toggle[data-passenger-id]",
+          `.carousel-next[data-carousel="${carouselId}"]`
         );
 
         const showSlide = (index: number) => {
@@ -1151,21 +1236,6 @@ export function ReturnRoute({ savedRoutes, onSaveRoute }: ReturnRouteProps) {
           const newIndex =
             currentSlide === passengerCount - 1 ? 0 : currentSlide + 1;
           showSlide(newIndex);
-        });
-
-        toggleButtons.forEach((button) => {
-          button.addEventListener("click", (e) => {
-            e.stopPropagation();
-            const target = e.currentTarget as HTMLElement;
-            const passengerId = target.getAttribute("data-passenger-id");
-            if (!passengerId) return;
-            const isSelected = target.getAttribute("data-selected") === "true";
-            togglePassenger(passengerId);
-            target.setAttribute("data-selected", isSelected ? "false" : "true");
-            target.textContent = isSelected
-              ? "Select passenger"
-              : "Remove passenger";
-          });
         });
 
         const popupEl = workPopup.getElement();
@@ -1231,9 +1301,9 @@ export function ReturnRoute({ savedRoutes, onSaveRoute }: ReturnRouteProps) {
 
       if (passengerCount === 1) {
         const passenger = passengersAtHome[0];
-        const isSelected = selectedPassengers.includes(passenger.id);
-        const displayTime = passenger.time ? passenger.time.slice(0, 5) : "";
-
+        const isSelected = selectedPassengers
+          .map((s) => String(s))
+          .includes(String(passenger.id));
         const homeEl = document.createElement("div");
         homeEl.style.display = "flex";
         homeEl.style.flexDirection = "column";
@@ -1262,24 +1332,10 @@ export function ReturnRoute({ savedRoutes, onSaveRoute }: ReturnRouteProps) {
             <svg xmlns="http://www.w3.org/2000/svg" width="${
               isSelected ? "14" : "10"
             }" height="${
-              isSelected ? "14" : "10"
-            }" viewBox="0 0 24 24" fill="white"><path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z"/></svg>
+          isSelected ? "14" : "10"
+        }" viewBox="0 0 24 24" fill="white"><path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z"/></svg>
           </div>
-          ${
-            displayTime
-              ? `<div style="
-            background-color: #036ffc;
-            color: white;
-            font-size: 9px;
-            font-weight: 600;
-            padding: 2px 5px;
-            border-radius: 4px;
-            margin-top: 2px;
-            white-space: nowrap;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.3);
-          ">${displayTime}</div>`
-              : ""
-          }`;
+          `;
 
         homeEl.addEventListener("click", () => {
           homePopup.remove(); // hover-only popup
@@ -1303,8 +1359,8 @@ export function ReturnRoute({ savedRoutes, onSaveRoute }: ReturnRouteProps) {
                   <span style="font-size: 11px; font-weight: bold;"class="text-xs ${
                     isSelected ? "text-green-600 font-bold" : "text-green-600"
                   }">${
-                    isSelected ? "SELECTED - HOME" : "HOME DESTINATION"
-                  }</span>, <span>${passenger.time}</span>
+          isSelected ? "SELECTED - HOME" : "HOME DESTINATION"
+        }</span>, <span>${passenger.time}</span>
                 </div>
               </div>
 
@@ -1386,33 +1442,44 @@ export function ReturnRoute({ savedRoutes, onSaveRoute }: ReturnRouteProps) {
       `;
 
       const createHomeCarouselHTML = () => {
-        const carouselId = `return-home-carousel-${coordKey.replace(/[.,]/g, "-")}`;
+        const carouselId = `return-home-carousel-${coordKey.replace(
+          /[.,]/g,
+          "-"
+        )}`;
+        const allPassengerIds = passengersAtHome.map((p) => String(p.id));
+        const allSelected = allPassengerIds.every((id) =>
+          selectedPassengers.map((s) => String(s)).includes(id)
+        );
         const passengersHTML = passengersAtHome
           .map((passenger, index) => {
-            const isSelected = selectedPassengers.includes(passenger.id);
+            const isSelected = selectedPassengers
+              .map((s) => String(s))
+              .includes(String(passenger.id));
             return `
           <div class="carousel-slide" data-index="${index}" style="display: ${
-            index === 0 ? "block" : "none"
-          };">
+              index === 0 ? "block" : "none"
+            };">
             <div class="flex items-center gap-2 mb-2">
               <div class="w-8 h-8 rounded-full bg-green-500 flex items-center justify-center flex-shrink-0">
                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="white"><path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z"/></svg>
               </div>
               <div class="min-w-0 flex-1">
                 <strong class="block truncate">${passenger.name}, ${
-                  passenger.id
-                }</strong>
+              passenger.id
+            }</strong>
                 <span class="text-xs ${
                   isSelected ? "text-green-600 font-bold" : "text-green-600"
                 }">${isSelected ? "SELECTED - HOME" : "HOME DESTINATION"}, ${
-                  passenger.time || ""
-                }</span>
+              passenger.time || ""
+            }</span>
               </div>
             </div>
             <p class="text-xs text-gray-600 mb-1"><strong>Home:</strong> ${
               passenger.destinationSubPoint || "N/A"
             }</p>
-            <p class="text-xs text-gray-500 truncate">${passenger.destination || ""}</p>
+            <p class="text-xs text-gray-500 truncate">${
+              passenger.destination || ""
+            }</p>
             <button class="passenger-toggle px-2 py-1 text-xs rounded border ${
               isSelected
                 ? "border-green-200 text-green-700 bg-green-50"
@@ -1431,6 +1498,15 @@ export function ReturnRoute({ savedRoutes, onSaveRoute }: ReturnRouteProps) {
           <div class="p-2" style="min-width: 260px;">
             <div class="flex items-center justify-between mb-2 pb-2 border-b border-gray-200">
               <span class="text-xs font-bold text-green-600">${passengerCount} Passengers at this location</span>
+              <button class="select-all-home-passengers px-2 py-1 text-xs rounded border ${
+                allSelected
+                  ? "border-green-200 text-green-700 bg-green-50"
+                  : "border-green-600 text-green-600 bg-white hover:bg-green-50"
+              }" data-passenger-ids="${allPassengerIds.join(
+          ","
+        )}" data-all-selected="${allSelected}">
+                ${allSelected ? "Deselect all" : "Select all"}
+              </button>
             </div>
             <div id="${carouselId}" class="carousel-container">
               ${passengersHTML}
@@ -1459,22 +1535,22 @@ export function ReturnRoute({ savedRoutes, onSaveRoute }: ReturnRouteProps) {
       let isPopupOpen = false;
 
       const setupHomeCarouselEvents = () => {
-        const carouselId = `return-home-carousel-${coordKey.replace(/[.,]/g, "-")}`;
+        const carouselId = `return-home-carousel-${coordKey.replace(
+          /[.,]/g,
+          "-"
+        )}`;
         const container = document.getElementById(carouselId);
         if (!container) return;
 
         const slides = container.querySelectorAll(".carousel-slide");
         const indicator = document.querySelector(
-          `.carousel-indicator[data-carousel="${carouselId}"]`,
+          `.carousel-indicator[data-carousel="${carouselId}"]`
         );
         const prevBtn = document.querySelector(
-          `.carousel-prev[data-carousel="${carouselId}"]`,
+          `.carousel-prev[data-carousel="${carouselId}"]`
         );
         const nextBtn = document.querySelector(
-          `.carousel-next[data-carousel="${carouselId}"]`,
-        );
-        const toggleButtons = container.querySelectorAll(
-          ".passenger-toggle[data-passenger-id]",
+          `.carousel-next[data-carousel="${carouselId}"]`
         );
 
         const showSlide = (index: number) => {
@@ -1500,21 +1576,6 @@ export function ReturnRoute({ savedRoutes, onSaveRoute }: ReturnRouteProps) {
           const newIndex =
             currentSlide === passengerCount - 1 ? 0 : currentSlide + 1;
           showSlide(newIndex);
-        });
-
-        toggleButtons.forEach((button) => {
-          button.addEventListener("click", (e) => {
-            e.stopPropagation();
-            const target = e.currentTarget as HTMLElement;
-            const passengerId = target.getAttribute("data-passenger-id");
-            if (!passengerId) return;
-            const isSelected = target.getAttribute("data-selected") === "true";
-            togglePassenger(passengerId);
-            target.setAttribute("data-selected", isSelected ? "false" : "true");
-            target.textContent = isSelected
-              ? "Select passenger"
-              : "Remove passenger";
-          });
         });
 
         const popupEl = homePopup.getElement();
@@ -1604,7 +1665,7 @@ export function ReturnRoute({ savedRoutes, onSaveRoute }: ReturnRouteProps) {
       // Function to calculate distance between two coordinates (Haversine formula)
       const getDistance = (
         coord1: [number, number],
-        coord2: [number, number],
+        coord2: [number, number]
       ): number => {
         const [lon1, lat1] = coord1;
         const [lon2, lat2] = coord2;
@@ -1624,7 +1685,7 @@ export function ReturnRoute({ savedRoutes, onSaveRoute }: ReturnRouteProps) {
       // Optimize route order using nearest neighbor algorithm
       const optimizeRoute = (
         start: [number, number],
-        locations: [number, number][],
+        locations: [number, number][]
       ): [number, number][] => {
         if (locations.length === 0) return [];
         if (locations.length === 1) return locations;
@@ -1664,7 +1725,7 @@ export function ReturnRoute({ savedRoutes, onSaveRoute }: ReturnRouteProps) {
       // Optimize pickup order starting from driver location
       const optimizedPickups = optimizeRoute(
         currentDriver.coordinates,
-        pickupCoordinates,
+        pickupCoordinates
       );
 
       // Optimize dropoff order starting from last pickup location
@@ -1674,7 +1735,7 @@ export function ReturnRoute({ savedRoutes, onSaveRoute }: ReturnRouteProps) {
           : currentDriver.coordinates;
       const optimizedDropoffs = optimizeRoute(
         lastPickupLocation,
-        dropoffCoordinates,
+        dropoffCoordinates
       );
 
       // Build complete optimized route
@@ -1705,7 +1766,7 @@ export function ReturnRoute({ savedRoutes, onSaveRoute }: ReturnRouteProps) {
         // Draw the route on the map
         if (map.current.getSource("route")) {
           (map.current.getSource("route") as mapboxgl.GeoJSONSource).setData(
-            route.geometry,
+            route.geometry
           );
         } else {
           map.current.addSource("route", {
@@ -1732,7 +1793,7 @@ export function ReturnRoute({ savedRoutes, onSaveRoute }: ReturnRouteProps) {
         // Fit map to show entire route
         const bounds = new mapboxgl.LngLatBounds();
         allWaypoints.forEach((coord) =>
-          bounds.extend(coord as [number, number]),
+          bounds.extend(coord as [number, number])
         );
         map.current.fitBounds(bounds, { padding: 80 });
       }
@@ -1743,10 +1804,12 @@ export function ReturnRoute({ savedRoutes, onSaveRoute }: ReturnRouteProps) {
     }
   };
 
-  const togglePassenger = (passengerId: string) => {
-    const newPassengers = selectedPassengers.includes(passengerId)
-      ? selectedPassengers.filter((id) => id !== passengerId)
-      : [...selectedPassengers, passengerId];
+  const togglePassenger = (passengerId: string | number) => {
+    const id = String(passengerId);
+    const currentStrings = selectedPassengers.map((s) => String(s));
+    const newPassengers = currentStrings.includes(id)
+      ? currentStrings.filter((s) => s !== id)
+      : [...currentStrings, id];
     setSelectedPassengers(newPassengers);
   };
 
@@ -1800,7 +1863,7 @@ export function ReturnRoute({ savedRoutes, onSaveRoute }: ReturnRouteProps) {
       map.current.setPaintProperty(
         "route",
         "line-color",
-        routeColors[nextIndex].primary,
+        routeColors[nextIndex].primary
       );
     }
   };
@@ -1885,7 +1948,7 @@ export function ReturnRoute({ savedRoutes, onSaveRoute }: ReturnRouteProps) {
         passengersService.getPassengersByShiftDateRoute(
           requestDate,
           routeType,
-          shift,
+          shift
         ),
       ]);
 
@@ -1895,7 +1958,7 @@ export function ReturnRoute({ savedRoutes, onSaveRoute }: ReturnRouteProps) {
 
       setDriversData(Array.isArray(driversResult) ? driversResult : []);
       setPassengersData(
-        Array.isArray(passengersResult) ? passengersResult : [],
+        Array.isArray(passengersResult) ? passengersResult : []
       );
     } catch (error: any) {
       if (isStaleRequest()) {
@@ -1955,8 +2018,8 @@ export function ReturnRoute({ savedRoutes, onSaveRoute }: ReturnRouteProps) {
                         onClick={() => {
                           dispatch(
                             setReturnDate(
-                              new Date().toISOString().split("T")[0],
-                            ),
+                              new Date().toISOString().split("T")[0]
+                            )
                           );
                           setShowDateDropdown(false);
                           clearSelections();
@@ -1975,7 +2038,7 @@ export function ReturnRoute({ savedRoutes, onSaveRoute }: ReturnRouteProps) {
                           const tomorrow = new Date();
                           tomorrow.setDate(tomorrow.getDate() + 1);
                           dispatch(
-                            setReturnDate(tomorrow.toISOString().split("T")[0]),
+                            setReturnDate(tomorrow.toISOString().split("T")[0])
                           );
                           setShowDateDropdown(false);
                           clearSelections();
@@ -2155,7 +2218,7 @@ export function ReturnRoute({ savedRoutes, onSaveRoute }: ReturnRouteProps) {
                             <span className="text-xs text-gray-400">
                               {
                                 rawDriverData.filter(
-                                  (d) => normalizeTime(d.TIME || "") === time,
+                                  (d) => normalizeTime(d.TIME || "") === time
                                 ).length
                               }
                             </span>
@@ -2242,7 +2305,7 @@ export function ReturnRoute({ savedRoutes, onSaveRoute }: ReturnRouteProps) {
                             setCheckedDrivers((prev) =>
                               prev.includes(driver.id)
                                 ? prev.filter((id) => id !== driver.id)
-                                : [...prev, driver.id],
+                                : [...prev, driver.id]
                             );
                           }}
                           className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500 cursor-pointer"
@@ -2401,7 +2464,7 @@ export function ReturnRoute({ savedRoutes, onSaveRoute }: ReturnRouteProps) {
                                   e.stopPropagation();
                                   if (timeFilter.includes(time)) {
                                     setTimeFilter(
-                                      timeFilter.filter((t) => t !== time),
+                                      timeFilter.filter((t) => t !== time)
                                     );
                                   } else {
                                     setTimeFilter([...timeFilter, time]);
@@ -2415,7 +2478,7 @@ export function ReturnRoute({ savedRoutes, onSaveRoute }: ReturnRouteProps) {
                               <span className="text-xs text-gray-400">
                                 {
                                   rawPassengerData.filter(
-                                    (p) => p.TIME === time,
+                                    (p) => p.TIME === time
                                   ).length
                                 }
                               </span>
@@ -2547,10 +2610,10 @@ export function ReturnRoute({ savedRoutes, onSaveRoute }: ReturnRouteProps) {
                     date: selectedDate,
                     drivers: driversData,
                     passengers: passengersData,
-                  }),
+                  })
                 );
                 setSaveDialogMessage(
-                  `Data saved for ${selectedShift} shift (Return route)`,
+                  `Data saved for ${selectedShift} shift (Return route)`
                 );
                 setShowSaveDialog(true);
               }}
@@ -2797,7 +2860,7 @@ function ConfirmationDialog({
         </div>
       </div>
     </div>,
-    document.body,
+    document.body
   );
 }
 
@@ -2837,6 +2900,6 @@ function InfoDialog({
         </div>
       </div>
     </div>,
-    document.body,
+    document.body
   );
 }
