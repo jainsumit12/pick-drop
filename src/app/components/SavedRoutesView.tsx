@@ -92,23 +92,6 @@ const normalizeTime = (time: string): string => {
   return `${hour}:${minute}`;
 };
 
-const formatTimeBadge = (time?: string): string => {
-  if (!time) return "";
-  const displayTime = time.slice(0, 5);
-  if (!displayTime) return "";
-  return `<div style="
-    background-color: #036ffc;
-    color: white;
-    font-size: 9px;
-    font-weight: 600;
-    padding: 2px 5px;
-    border-radius: 4px;
-    margin-top: 2px;
-    white-space: nowrap;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.3);
-  ">${displayTime}</div>`;
-};
-
 // Convert rider data to Location format
 const convertRidersToLocations = (riders: ShiftDriver[]): Location[] => {
   return riders.flatMap((rider) => {
@@ -451,13 +434,27 @@ export function SavedRoutesView({
         markersRef.current.push(marker);
       }
 
-      // Add passenger markers
+      // Add passenger markers - Group by pickup coordinates
       const passengerDataList = getPassengersForRoute(route);
-      passengerDataList.forEach((passenger) => {
-        // Pickup marker
-        console.log(passenger, "passenger");
 
-        const displayTime = passenger.time ? passenger.time.slice(0, 5) : "";
+      // Group passengers by pickup coordinates
+      const pickupGroups = new Map<string, RouteParticipantLike[]>();
+      passengerDataList.forEach((passenger) => {
+        const coordKey = `${passenger.coordinates[0]},${passenger.coordinates[1]}`;
+        if (!pickupGroups.has(coordKey)) {
+          pickupGroups.set(coordKey, []);
+        }
+        pickupGroups.get(coordKey)!.push(passenger);
+      });
+
+      // Create pickup markers for each unique location
+      pickupGroups.forEach((passengersAtPickup, coordKey) => {
+        const [lng, lat] = coordKey.split(",").map(Number);
+        const coordinates: [number, number] = [lng, lat];
+        const passengerCount = passengersAtPickup.length;
+        const firstPassenger = passengersAtPickup[0];
+        const displayTime = firstPassenger.time ? firstPassenger.time.slice(0, 5) : "";
+
         const el = document.createElement("div");
         el.style.display = "flex";
         el.style.flexDirection = "column";
@@ -465,74 +462,219 @@ export function SavedRoutesView({
         el.style.justifyContent = "center";
         el.style.cursor = "pointer";
         el.style.opacity = "0.9";
-        const timeBadgeHTML = formatTimeBadge(passenger.time);
-        el.innerHTML = `
-          <div style="display:flex; flex-direction:column; align-items:center;">
-            <div style="
-              width: 30px;
-              height: 30px;
-              border-radius: 50%;
-              background-color: #3b82f5;
-              border: 3px solid white;
-              box-shadow: 0 4px 8px rgba(0,0,0,0.3);
-              display: flex;
-              align-items: center;
-              justify-content: center;
-            ">
-              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="white"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>
-            </div>
-            
-          </div>
-           ${
-             displayTime
-               ? `<div style="
-          background-color: #036ffc;
-          color: white;
-          font-size: 9px;
-          font-weight: 600;
-          padding: 2px 5px;
-          border-radius: 4px;
-          margin-top: 2px;
-          white-space: nowrap;
-          box-shadow: 0 1px 3px rgba(0,0,0,0.3);
-        ">${displayTime}</div>`
-               : ""
-           }
-        `;
 
-        const marker = new mapboxgl.Marker(el)
-          .setLngLat(passenger.coordinates)
-          .setPopup(
-            new mapboxgl.Popup().setHTML(`
-            <div class="p-2">
+        if (passengerCount > 1) {
+          el.innerHTML = `
+            <div style="display:flex; flex-direction:column; align-items:center;">
+              <div style="
+                width: 32px;
+                height: 32px;
+                border-radius: 50%;
+                background-color: #3b82f5;
+                border: 3px solid white;
+                box-shadow: 0 4px 8px rgba(0,0,0,0.3);
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                position: relative;
+              ">
+                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="white"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>
+                <div style="position: absolute; top: -6px; right: -6px; background: #0f172a; color: white; font-size: 10px; font-weight: bold; width: 18px; height: 18px; border-radius: 50%; display: flex; align-items: center; justify-content: center; border: 2px solid white;">${passengerCount}</div>
+              </div>
+            </div>
+            ${displayTime ? `<div style="
+              background-color: #036ffc;
+              color: white;
+              font-size: 9px;
+              font-weight: 600;
+              padding: 2px 5px;
+              border-radius: 4px;
+              margin-top: 2px;
+              white-space: nowrap;
+              box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+            ">${displayTime}</div>` : ""}
+          `;
+        } else {
+          el.innerHTML = `
+            <div style="display:flex; flex-direction:column; align-items:center;">
+              <div style="
+                width: 30px;
+                height: 30px;
+                border-radius: 50%;
+                background-color: #3b82f5;
+                border: 3px solid white;
+                box-shadow: 0 4px 8px rgba(0,0,0,0.3);
+                display: flex;
+                align-items: center;
+                justify-content: center;
+              ">
+                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="white"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>
+              </div>
+            </div>
+            ${displayTime ? `<div style="
+              background-color: #036ffc;
+              color: white;
+              font-size: 9px;
+              font-weight: 600;
+              padding: 2px 5px;
+              border-radius: 4px;
+              margin-top: 2px;
+              white-space: nowrap;
+              box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+            ">${displayTime}</div>` : ""}
+          `;
+        }
+
+        // Create carousel HTML for pickup markers
+        const createPickupCarouselHTML = () => {
+          if (passengerCount === 1) {
+            const passenger = passengersAtPickup[0];
+            return `
+              <div class="p-2">
+                <div class="flex items-center gap-2 mb-2">
+                  <div class="w-8 h-8 rounded-full flex items-center justify-center" style="background-color: ${route.color.primary}">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="white"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>
+                  </div>
+                  <div>
+                    <strong class="block">${passenger.name}</strong>
+                    <span class="text-xs font-bold" style="color: ${route.color.primary}">PICKUP - ${route.name}</span>
+                  </div>
+                </div>
+                <p class="text-xs text-gray-600 mb-1"><strong>Location:</strong> ${passenger.subPoint}</p>
+                <p class="text-xs text-gray-600 mb-1"><strong>Phone:</strong> ${passenger.phone}</p>
+                <p class="text-xs text-gray-500 mb-2">${passenger.address}</p>
+                ${passenger.destinationSubPoint ? `<p class="text-xs text-orange-600 font-medium"><strong>Destination:</strong> ${passenger.destinationSubPoint}</p>` : ""}
+              </div>
+            `;
+          }
+
+          // Multiple passengers - create carousel
+          const carouselId = `pickup-carousel-${route.id}-${coordKey.replace(/[.,]/g, "-")}`;
+          const passengersHTML = passengersAtPickup.map((passenger, index) => `
+            <div class="carousel-slide" data-index="${index}" style="display: ${index === 0 ? "block" : "none"};">
               <div class="flex items-center gap-2 mb-2">
-                <div class="w-8 h-8 rounded-full flex items-center justify-center" style="background-color: ${
-                  route.color.primary
-                }">
+                <div class="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0" style="background-color: ${route.color.primary}">
                   <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="white"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>
                 </div>
-                <div>
-                  <strong class="block">${passenger.name}</strong>
-                  <span class="text-xs font-bold" style="color: ${
-                    route.color.primary
-                  }">PICKUP - ${route.name}</span>
+                <div class="min-w-0 flex-1">
+                  <strong class="block truncate">${passenger.name}</strong>
+                  <span class="text-xs font-bold" style="color: ${route.color.primary}">PICKUP - ${route.name}, ${passenger.time || ""}</span>
                 </div>
               </div>
-              <p class="text-xs text-gray-600 mb-1"><strong>Location:</strong> ${
-                passenger.subPoint
-              }</p>
-              <p class="text-xs text-gray-600 mb-1"><strong>Phone:</strong> ${
-                passenger.phone
-              }</p>
+              <p class="text-xs text-gray-600 mb-1"><strong>Location:</strong> ${passenger.subPoint}</p>
+              <p class="text-xs text-gray-600 mb-1"><strong>Phone:</strong> ${passenger.phone}</p>
               <p class="text-xs text-gray-500 mb-2">${passenger.address}</p>
-              ${
-                passenger.destinationSubPoint
-                  ? `<p class="text-xs text-orange-600 font-medium"><strong>Destination:</strong> ${passenger.destinationSubPoint}</p>`
-                  : ""
-              }
+              ${passenger.destinationSubPoint ? `<p class="text-xs text-orange-600 font-medium"><strong>Destination:</strong> ${passenger.destinationSubPoint}</p>` : ""}
             </div>
-          `)
-          )
+          `).join("");
+
+          return `
+            <div class="p-2" style="min-width: 260px;">
+              <div class="flex items-center justify-between mb-2 pb-2 border-b border-gray-200">
+                <span class="text-xs font-bold" style="color: ${route.color.primary}">${passengerCount} Passengers at this location</span>
+              </div>
+              <div id="${carouselId}" class="carousel-container">
+                ${passengersHTML}
+              </div>
+              <div class="flex items-center justify-between mt-3 pt-2 border-t border-gray-200">
+                <button class="carousel-prev px-2 py-1 text-xs bg-gray-100 hover:bg-gray-200 rounded transition-colors" data-carousel="${carouselId}">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg>
+                </button>
+                <span class="carousel-indicator text-xs text-gray-500" data-carousel="${carouselId}">1 / ${passengerCount}</span>
+                <button class="carousel-next px-2 py-1 text-xs bg-gray-100 hover:bg-gray-200 rounded transition-colors" data-carousel="${carouselId}">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg>
+                </button>
+              </div>
+            </div>
+          `;
+        };
+
+        const pickupPopup = new mapboxgl.Popup({
+          closeButton: false,
+          closeOnClick: false,
+          maxWidth: "300px",
+        }).setHTML(createPickupCarouselHTML());
+
+        // Carousel state tracking for pickup
+        let pickupCurrentSlide = 0;
+        let pickupCloseTimeout: ReturnType<typeof setTimeout> | null = null;
+        let pickupIsPopupOpen = false;
+
+        const setupPickupCarouselEvents = () => {
+          if (passengerCount <= 1) return;
+
+          const carouselId = `pickup-carousel-${route.id}-${coordKey.replace(/[.,]/g, "-")}`;
+          const container = document.getElementById(carouselId);
+          if (!container) return;
+
+          const slides = container.querySelectorAll(".carousel-slide");
+          const indicator = document.querySelector(`.carousel-indicator[data-carousel="${carouselId}"]`);
+          const prevBtn = document.querySelector(`.carousel-prev[data-carousel="${carouselId}"]`);
+          const nextBtn = document.querySelector(`.carousel-next[data-carousel="${carouselId}"]`);
+
+          const showSlide = (index: number) => {
+            slides.forEach((slide, i) => {
+              (slide as HTMLElement).style.display = i === index ? "block" : "none";
+            });
+            if (indicator) {
+              indicator.textContent = `${index + 1} / ${passengerCount}`;
+            }
+            pickupCurrentSlide = index;
+          };
+
+          prevBtn?.addEventListener("click", (e) => {
+            e.stopPropagation();
+            const newIndex = pickupCurrentSlide === 0 ? passengerCount - 1 : pickupCurrentSlide - 1;
+            showSlide(newIndex);
+          });
+
+          nextBtn?.addEventListener("click", (e) => {
+            e.stopPropagation();
+            const newIndex = pickupCurrentSlide === passengerCount - 1 ? 0 : pickupCurrentSlide + 1;
+            showSlide(newIndex);
+          });
+
+          const popupEl = pickupPopup.getElement();
+          if (popupEl) {
+            popupEl.addEventListener("mouseenter", () => {
+              if (pickupCloseTimeout) {
+                clearTimeout(pickupCloseTimeout);
+                pickupCloseTimeout = null;
+              }
+            });
+
+            popupEl.addEventListener("mouseleave", () => {
+              pickupCloseTimeout = setTimeout(() => {
+                pickupPopup.remove();
+                pickupIsPopupOpen = false;
+              }, 100);
+            });
+          }
+        };
+
+        el.addEventListener("mouseenter", () => {
+          if (pickupCloseTimeout) {
+            clearTimeout(pickupCloseTimeout);
+            pickupCloseTimeout = null;
+          }
+          if (!pickupIsPopupOpen) {
+            pickupCurrentSlide = 0;
+            pickupPopup.setHTML(createPickupCarouselHTML());
+            pickupPopup.setLngLat(coordinates).addTo(map.current!);
+            pickupIsPopupOpen = true;
+            setTimeout(setupPickupCarouselEvents, 0);
+          }
+        });
+
+        el.addEventListener("mouseleave", () => {
+          pickupCloseTimeout = setTimeout(() => {
+            pickupPopup.remove();
+            pickupIsPopupOpen = false;
+          }, 150);
+        });
+
+        const marker = new mapboxgl.Marker(el)
+          .setLngLat(coordinates)
           .addTo(map.current!);
 
         markersRef.current.push(marker);
@@ -1035,7 +1177,7 @@ export function SavedRoutesView({
                     />
                     <div className="flex-1">
                       <CardTitle className="text-base text-[13px]">
-                        {route.name} - {driverData?.name} - {driverData?.id} -{" "}
+                        {route.name} - <span className="text-red-600">{driverData?.name}</span> - {driverData?.id} -{" "}
                         {driverData?.subPoint} - {driverData?.time}
                       </CardTitle>
                       <div className="flex items-center gap-2 mt-1">

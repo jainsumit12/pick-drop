@@ -40,7 +40,7 @@ import {
   setGoingDriverSearch,
   setGoingPassengerSearch,
 } from "../../store/slices/filterSlice";
-import { clearAllData, saveRouteData } from "../../store/slices/dataSlice";
+import { clearRouteData, saveRouteData } from "../../store/slices/dataSlice";
 import { SHIFT_TYPES, normalizeShift } from "../../constants/shifts";
 
 interface Location {
@@ -1829,34 +1829,23 @@ export function CreateRoute({ savedRoutes, onSaveRoute }: CreateRouteProps) {
     setShowBottomPanel(false);
   };
 
-  const clearRouteState = () => {
-    clearSelections();
-    setDriversData([]);
-    setPassengersData([]);
-    setCheckedDrivers([]);
-    setDriversError(null);
-    setPassengersError(null);
-    setDriverSearch("");
-    setPassengerSearch("");
-    setPickupCityFilter("All");
-    setDestinationCityFilter("All");
-    setTimeFilter([]);
-    setDriverTimeFilter([]);
-    setShowDriverDropdown(false);
-    setShowPassengerDropdown(false);
-    setShowTimeDropdown(false);
-    setShowDriverTimeDropdown(false);
-    setShowDateDropdown(false);
-    setShowShiftDropdown(false);
-    dispatch(clearAllData());
-  };
-
   const handleClearDataClick = () => {
     setShowClearDialog(true);
   };
 
   const handleConfirmClear = () => {
-    clearRouteState();
+    // Clear only the data for current date and shift
+    dispatch(
+      clearRouteData({
+        routeType: "going",
+        shift: normalizedShift,
+        date: selectedDate,
+      })
+    );
+    // Clear local state
+    setDriversData([]);
+    setPassengersData([]);
+    clearSelections();
     setShowClearDialog(false);
   };
 
@@ -1933,7 +1922,7 @@ export function CreateRoute({ savedRoutes, onSaveRoute }: CreateRouteProps) {
 
     const newRoute: SavedRoute = {
       id: `route-${Date.now()}`,
-      name: `Route ${goingRoutes?.length + 1}`,
+      name: `GR ${goingRoutes?.length + 1}`,
       driverId: selectedDriver,
       passengerIds: selectedPassengers.map((id) => String(id)),
       routeInfo: routeInfo,
