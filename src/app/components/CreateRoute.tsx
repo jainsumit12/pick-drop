@@ -450,13 +450,13 @@ export function CreateRoute({ savedRoutes, onSaveRoute }: CreateRouteProps) {
   });
 
   const currentPassengers = availablePassengers.filter((p) =>
-    selectedPassengers.includes(p.id)
+    selectedPassengers.map((s) => String(s)).includes(String(p.id))
   );
 
   useEffect(() => {
     if (!currentDriver || selectedPassengers?.length === 0) return;
     const nextPassengers = selectedPassengers.filter((id) => {
-      const passenger = baseAvailablePassengers.find((p) => p.id === id);
+      const passenger = baseAvailablePassengers.find((p) => String(p.id) === String(id));
       if (!passenger) return true;
       return normalizeAddress(passenger.address) !== normalizedDriverAddress;
     });
@@ -511,6 +511,34 @@ export function CreateRoute({ savedRoutes, onSaveRoute }: CreateRouteProps) {
   useEffect(() => {
     const handlePassengerToggle = (event: MouseEvent) => {
       const target = event.target as HTMLElement;
+
+      // Handle "Select all" button
+      const selectAllBtn = target.closest(
+        ".select-all-passengers[data-passenger-ids]"
+      ) as HTMLElement;
+      if (selectAllBtn) {
+        event.stopPropagation();
+        event.preventDefault();
+        const passengerIdsStr = selectAllBtn.getAttribute("data-passenger-ids");
+        if (!passengerIdsStr) return;
+        const passengerIds = passengerIdsStr.split(",");
+        const current = selectedPassengersRef.current.map((id) => String(id));
+        const allSelected = passengerIds.every((id) => current.includes(id));
+
+        if (allSelected) {
+          // Deselect all - remove these passengers
+          const newPassengers = current.filter(
+            (id) => !passengerIds.includes(id)
+          );
+          dispatch(setGoingPassengers(newPassengers));
+        } else {
+          // Select all - add these passengers
+          const newPassengers = [...new Set([...current, ...passengerIds])];
+          dispatch(setGoingPassengers(newPassengers));
+        }
+        return;
+      }
+
       const button = target.closest(".passenger-toggle[data-passenger-id]") as HTMLElement;
       if (!button) return;
 
@@ -903,7 +931,7 @@ export function CreateRoute({ savedRoutes, onSaveRoute }: CreateRouteProps) {
 
       if (passengerCount === 1) {
         const passenger = passengersAtPickup[0];
-        const isSelected = selectedPassengers.includes(passenger.id);
+        const isSelected = selectedPassengers.map((s) => String(s)).includes(String(passenger.id));
 
         // Add pickup marker (green) with time label
         const el = document.createElement("div");
@@ -1046,9 +1074,15 @@ export function CreateRoute({ savedRoutes, onSaveRoute }: CreateRouteProps) {
 
       const createPickupCarouselHTML = () => {
         const carouselId = `pickup-carousel-${coordKey.replace(/[.,]/g, "-")}`;
+        const allPassengerIds = passengersAtPickup.map((p) => String(p.id));
+        const allSelected = allPassengerIds.every((id) =>
+          selectedPassengers.map((s) => String(s)).includes(id)
+        );
         const passengersHTML = passengersAtPickup
           .map((passenger, index) => {
-            const isSelected = selectedPassengers.includes(passenger.id);
+            const isSelected = selectedPassengers
+              .map((s) => String(s))
+              .includes(String(passenger.id));
             return `
           <div class="carousel-slide" data-index="${index}" style="display: ${
               index === 0 ? "block" : "none"
@@ -1102,6 +1136,15 @@ export function CreateRoute({ savedRoutes, onSaveRoute }: CreateRouteProps) {
           <div class="p-2" style="min-width: 260px;">
             <div class="flex items-center justify-between mb-2 pb-2 border-b border-gray-200">
               <span class="text-xs font-bold text-green-600">${passengerCount} Passengers at this location</span>
+              <button class="select-all-passengers px-2 py-1 text-xs rounded border ${
+                allSelected
+                  ? "border-green-200 text-green-700 bg-green-50"
+                  : "border-green-600 text-green-600 bg-white hover:bg-green-50"
+              }" data-passenger-ids="${allPassengerIds.join(
+          ","
+        )}" data-all-selected="${allSelected}">
+                ${allSelected ? "Deselect all" : "Select all"}
+              </button>
             </div>
             <div id="${carouselId}" class="carousel-container">
               ${passengersHTML}
@@ -1243,7 +1286,7 @@ export function CreateRoute({ savedRoutes, onSaveRoute }: CreateRouteProps) {
     // Group selected passengers by destination coordinates for drop-off markers
     const destinationGroups = new Map<string, Location[]>();
     filteredPassengers.forEach((passenger) => {
-      const isSelected = selectedPassengers.includes(passenger.id);
+      const isSelected = selectedPassengers.map((s) => String(s)).includes(String(passenger.id));
       if (passenger.destinationCoordinates && isSelected) {
         const coordKey = `${passenger.destinationCoordinates[0]},${passenger.destinationCoordinates[1]}`;
         if (!destinationGroups.has(coordKey)) {
@@ -1286,7 +1329,7 @@ export function CreateRoute({ savedRoutes, onSaveRoute }: CreateRouteProps) {
       const createCarouselHTML = () => {
         if (passengerCount === 1) {
           const passenger = passengersAtDest[0];
-          const isSelected = selectedPassengers.includes(passenger.id);
+          const isSelected = selectedPassengers.map((s) => String(s)).includes(String(passenger.id));
           return `
             <div class="p-2">
               <div class="flex items-center gap-2 mb-2">
@@ -1321,9 +1364,15 @@ export function CreateRoute({ savedRoutes, onSaveRoute }: CreateRouteProps) {
 
         // Multiple passengers - create carousel
         const carouselId = `carousel-${coordKey.replace(/[.,]/g, "-")}`;
+        const allPassengerIds = passengersAtDest.map((p) => String(p.id));
+        const allSelected = allPassengerIds.every((id) =>
+          selectedPassengers.map((s) => String(s)).includes(id)
+        );
         const passengersHTML = passengersAtDest
           .map((passenger, index) => {
-            const isSelected = selectedPassengers.includes(passenger.id);
+            const isSelected = selectedPassengers
+              .map((s) => String(s))
+              .includes(String(passenger.id));
             return `
           <div class="carousel-slide" data-index="${index}" style="display: ${
               index === 0 ? "block" : "none"
@@ -1363,6 +1412,15 @@ export function CreateRoute({ savedRoutes, onSaveRoute }: CreateRouteProps) {
           <div class="p-2" style="min-width: 220px;">
             <div class="flex items-center justify-between mb-2 pb-2 border-b border-gray-200">
               <span class="text-xs font-bold text-orange-600">${passengerCount} Passengers at this location</span>
+              <button class="select-all-passengers px-2 py-1 text-xs rounded border ${
+                allSelected
+                  ? "border-orange-200 text-orange-700 bg-orange-50"
+                  : "border-orange-600 text-orange-600 bg-white hover:bg-orange-50"
+              }" data-passenger-ids="${allPassengerIds.join(
+          ","
+        )}" data-all-selected="${allSelected}">
+                ${allSelected ? "Deselect all" : "Select all"}
+              </button>
             </div>
             <div id="${carouselId}" class="carousel-container">
               ${passengersHTML}
@@ -1757,9 +1815,10 @@ export function CreateRoute({ savedRoutes, onSaveRoute }: CreateRouteProps) {
   };
 
   const togglePassenger = (passengerId: string) => {
-    const newPassengers = selectedPassengers.includes(passengerId)
-      ? selectedPassengers.filter((id) => id !== passengerId)
-      : [...selectedPassengers, passengerId];
+    const passengerIdStr = String(passengerId);
+    const newPassengers = selectedPassengers.map((s) => String(s)).includes(passengerIdStr)
+      ? selectedPassengers.filter((id) => String(id) !== passengerIdStr)
+      : [...selectedPassengers, passengerIdStr];
     setSelectedPassengers(newPassengers);
   };
 
@@ -2471,20 +2530,20 @@ export function CreateRoute({ savedRoutes, onSaveRoute }: CreateRouteProps) {
                       >
                         <input
                           type="checkbox"
-                          checked={selectedPassengers.includes(passenger.id)}
+                          checked={selectedPassengers.map((s) => String(s)).includes(String(passenger.id))}
                           onChange={() => togglePassenger(passenger.id)}
                           className="w-4 h-4 text-green-600 rounded focus:ring-green-500"
                         />
                         <div
                           className={`w-10 h-10 rounded-full flex items-center justify-center ${
-                            selectedPassengers.includes(passenger.id)
+                            selectedPassengers.map((s) => String(s)).includes(String(passenger.id))
                               ? "bg-green-500"
                               : "bg-gray-200"
                           }`}
                         >
                           <Users
                             className={`w-5 h-5 ${
-                              selectedPassengers.includes(passenger.id)
+                              selectedPassengers.map((s) => String(s)).includes(String(passenger.id))
                                 ? "text-white"
                                 : "text-gray-600"
                             }`}
