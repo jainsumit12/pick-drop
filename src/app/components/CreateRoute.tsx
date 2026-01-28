@@ -331,7 +331,7 @@ export function CreateRoute({ savedRoutes, onSaveRoute }: CreateRouteProps) {
   const usedPassengerIds = new Set(
     savedRoutes
       .filter((route) => route.routeType === "going")
-      .flatMap((route) => route.passengerIds)
+      .flatMap((route) => route.passengerIds.map((id) => String(id)))
   );
 
   const availableDrivers = drivers;
@@ -341,7 +341,7 @@ export function CreateRoute({ savedRoutes, onSaveRoute }: CreateRouteProps) {
     : null;
 
   const baseAvailablePassengers = passengers.filter(
-    (passenger) => !usedPassengerIds.has(passenger.id)
+    (passenger) => !usedPassengerIds.has(String(passenger.id))
   );
   const availablePassengers = normalizedDriverAddress
     ? baseAvailablePassengers.filter(
@@ -1935,7 +1935,7 @@ export function CreateRoute({ savedRoutes, onSaveRoute }: CreateRouteProps) {
       id: `route-${Date.now()}`,
       name: `Route ${goingRoutes?.length + 1}`,
       driverId: selectedDriver,
-      passengerIds: selectedPassengers,
+      passengerIds: selectedPassengers.map((id) => String(id)),
       routeInfo: routeInfo,
       color: routeColors[routeColorIndex],
       visible: true,
