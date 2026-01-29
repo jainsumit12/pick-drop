@@ -264,6 +264,14 @@ export function CreateRoute({ savedRoutes, onSaveRoute }: CreateRouteProps) {
   // Filter states
   const [checkedDrivers, setCheckedDrivers] = useState<string[]>([]); // Drivers visible on map
 
+  const toggleDriverVisibility = (driverId: string) => {
+    setCheckedDrivers((prev) =>
+      prev.includes(driverId)
+        ? prev.filter((id) => id !== driverId)
+        : [...prev, driverId]
+    );
+  };
+
   const [showTimeDropdown, setShowTimeDropdown] = useState(false);
   const [showDriverTimeDropdown, setShowDriverTimeDropdown] = useState(false);
 
@@ -639,10 +647,10 @@ export function CreateRoute({ savedRoutes, onSaveRoute }: CreateRouteProps) {
     markersRef.current = [];
 
     // Add driver markers based on filter and checkbox selection
-    const driversToShow =
-      checkedDrivers?.length > 0
-        ? filteredDrivers.filter((d) => checkedDrivers.includes(d.id))
-        : filteredDrivers;
+      const driversToShow =
+        checkedDrivers?.length > 0
+          ? drivers.filter((d) => checkedDrivers.includes(d.id))
+          : filteredDrivers;
 
     const driverGroups = new Map<string, Location[]>();
     driversToShow.forEach((driver) => {
@@ -2388,11 +2396,7 @@ export function CreateRoute({ savedRoutes, onSaveRoute }: CreateRouteProps) {
                           checked={checkedDrivers.includes(driver.id)}
                           onChange={(e) => {
                             e.stopPropagation();
-                            setCheckedDrivers((prev) =>
-                              prev.includes(driver.id)
-                                ? prev.filter((id) => id !== driver.id)
-                                : [...prev, driver.id]
-                            );
+                            toggleDriverVisibility(driver.id);
                           }}
                           className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500 cursor-pointer"
                         />
@@ -2708,17 +2712,29 @@ export function CreateRoute({ savedRoutes, onSaveRoute }: CreateRouteProps) {
                     </div>
                   ) : (
                     occupiedDrivers.map((driver) => (
-                      <div
+                      <label
                         key={`${driver.id}-occupied`}
-                        className="px-4 py-3 border-b last:border-b-0 text-xs leading-tight"
+                        className="flex items-start gap-2 px-4 py-3 border-b last:border-b-0 text-xs leading-tight cursor-pointer"
+                        onClick={(e) => e.stopPropagation()}
                       >
-                        <p className="font-medium text-gray-700 truncate">
-                          {driver.name}
-                        </p>
-                        <p className="text-[11px] text-gray-500">
-                          {driver.id} • {driver.subPoint}
-                        </p>
-                      </div>
+                        <input
+                          type="checkbox"
+                          checked={checkedDrivers.includes(driver.id)}
+                          onChange={(e) => {
+                            e.stopPropagation();
+                            toggleDriverVisibility(driver.id);
+                          }}
+                          className="mt-1 w-3 h-3 text-blue-600 rounded focus:ring-blue-500"
+                        />
+                        <span className="flex-1 min-w-0">
+                          <p className="font-medium text-gray-700 truncate">
+                            {driver.name}
+                          </p>
+                          <p className="text-[11px] text-gray-500">
+                            {driver.id} • {driver.subPoint}
+                          </p>
+                        </span>
+                      </label>
                     ))
                   )}
                 </div>
