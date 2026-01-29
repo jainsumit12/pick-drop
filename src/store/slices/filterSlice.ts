@@ -13,9 +13,35 @@ interface RouteFilters {
   passengerSearch: string;
 }
 
+interface CombinedRouteFilters {
+  selectedDate: string;
+  selectedShift: string;
+  // Going part
+  goingDriver: string | null;
+  goingPassengers: string[];
+  goingPickupCityFilter: string;
+  goingDestinationCityFilter: string;
+  goingTimeFilter: string[];
+  goingDriverTimeFilter: string[];
+  goingDriverSearch: string;
+  goingPassengerSearch: string;
+  // Return part
+  returnDriver: string | null;
+  returnPassengers: string[];
+  returnPickupCityFilter: string;
+  returnDestinationCityFilter: string;
+  returnTimeFilter: string[];
+  returnDriverTimeFilter: string[];
+  returnDriverSearch: string;
+  returnPassengerSearch: string;
+  // Current step
+  currentStep: 'going' | 'return';
+}
+
 interface FilterState {
   going: RouteFilters;
   return: RouteFilters;
+  combined: CombinedRouteFilters;
 }
 
 const getInitialDate = (): string => {
@@ -46,6 +72,27 @@ const initialState: FilterState = {
     driverTimeFilter: [],
     driverSearch: '',
     passengerSearch: '',
+  },
+  combined: {
+    selectedDate: getInitialDate(),
+    selectedShift: 'Morning',
+    goingDriver: null,
+    goingPassengers: [],
+    goingPickupCityFilter: 'All',
+    goingDestinationCityFilter: 'All',
+    goingTimeFilter: [],
+    goingDriverTimeFilter: [],
+    goingDriverSearch: '',
+    goingPassengerSearch: '',
+    returnDriver: null,
+    returnPassengers: [],
+    returnPickupCityFilter: 'All',
+    returnDestinationCityFilter: 'All',
+    returnTimeFilter: [],
+    returnDriverTimeFilter: [],
+    returnDriverSearch: '',
+    returnPassengerSearch: '',
+    currentStep: 'going',
   },
 };
 
@@ -161,6 +208,87 @@ const filterSlice = createSlice({
     setReturnPassengerSearch: (state, action: PayloadAction<string>) => {
       state.return.passengerSearch = action.payload;
     },
+    // Combined route actions
+    setCombinedDate: (state, action: PayloadAction<string>) => {
+      state.combined.selectedDate = action.payload;
+    },
+    setCombinedShift: (state, action: PayloadAction<string>) => {
+      state.combined.selectedShift = action.payload;
+    },
+    setCombinedStep: (state, action: PayloadAction<'going' | 'return'>) => {
+      state.combined.currentStep = action.payload;
+    },
+    setCombinedGoingDriver: (state, action: PayloadAction<string | null>) => {
+      state.combined.goingDriver = action.payload;
+    },
+    setCombinedGoingPassengers: (state, action: PayloadAction<string[]>) => {
+      state.combined.goingPassengers = action.payload;
+    },
+    setCombinedGoingPickupCityFilter: (state, action: PayloadAction<string>) => {
+      state.combined.goingPickupCityFilter = action.payload;
+    },
+    setCombinedGoingDestinationCityFilter: (state, action: PayloadAction<string>) => {
+      state.combined.goingDestinationCityFilter = action.payload;
+    },
+    setCombinedGoingTimeFilter: (state, action: PayloadAction<string[]>) => {
+      state.combined.goingTimeFilter = action.payload;
+    },
+    setCombinedGoingDriverTimeFilter: (state, action: PayloadAction<string[]>) => {
+      state.combined.goingDriverTimeFilter = action.payload;
+    },
+    setCombinedGoingDriverSearch: (state, action: PayloadAction<string>) => {
+      state.combined.goingDriverSearch = action.payload;
+    },
+    setCombinedGoingPassengerSearch: (state, action: PayloadAction<string>) => {
+      state.combined.goingPassengerSearch = action.payload;
+    },
+    setCombinedReturnDriver: (state, action: PayloadAction<string | null>) => {
+      state.combined.returnDriver = action.payload;
+    },
+    setCombinedReturnPassengers: (state, action: PayloadAction<string[]>) => {
+      state.combined.returnPassengers = action.payload;
+    },
+    setCombinedReturnPickupCityFilter: (state, action: PayloadAction<string>) => {
+      state.combined.returnPickupCityFilter = action.payload;
+    },
+    setCombinedReturnDestinationCityFilter: (state, action: PayloadAction<string>) => {
+      state.combined.returnDestinationCityFilter = action.payload;
+    },
+    setCombinedReturnTimeFilter: (state, action: PayloadAction<string[]>) => {
+      state.combined.returnTimeFilter = action.payload;
+    },
+    setCombinedReturnDriverTimeFilter: (state, action: PayloadAction<string[]>) => {
+      state.combined.returnDriverTimeFilter = action.payload;
+    },
+    setCombinedReturnDriverSearch: (state, action: PayloadAction<string>) => {
+      state.combined.returnDriverSearch = action.payload;
+    },
+    setCombinedReturnPassengerSearch: (state, action: PayloadAction<string>) => {
+      state.combined.returnPassengerSearch = action.payload;
+    },
+    resetCombinedFilters: (state) => {
+      state.combined = {
+        selectedDate: getInitialDate(),
+        selectedShift: 'Morning',
+        goingDriver: null,
+        goingPassengers: [],
+        goingPickupCityFilter: 'All',
+        goingDestinationCityFilter: 'All',
+        goingTimeFilter: [],
+        goingDriverTimeFilter: [],
+        goingDriverSearch: '',
+        goingPassengerSearch: '',
+        returnDriver: null,
+        returnPassengers: [],
+        returnPickupCityFilter: 'All',
+        returnDestinationCityFilter: 'All',
+        returnTimeFilter: [],
+        returnDriverTimeFilter: [],
+        returnDriverSearch: '',
+        returnPassengerSearch: '',
+        currentStep: 'going',
+      };
+    },
   },
 });
 
@@ -188,5 +316,26 @@ export const {
   setReturnDriverTimeFilter,
   setReturnDriverSearch,
   setReturnPassengerSearch,
+  // Combined route actions
+  setCombinedDate,
+  setCombinedShift,
+  setCombinedStep,
+  setCombinedGoingDriver,
+  setCombinedGoingPassengers,
+  setCombinedGoingPickupCityFilter,
+  setCombinedGoingDestinationCityFilter,
+  setCombinedGoingTimeFilter,
+  setCombinedGoingDriverTimeFilter,
+  setCombinedGoingDriverSearch,
+  setCombinedGoingPassengerSearch,
+  setCombinedReturnDriver,
+  setCombinedReturnPassengers,
+  setCombinedReturnPickupCityFilter,
+  setCombinedReturnDestinationCityFilter,
+  setCombinedReturnTimeFilter,
+  setCombinedReturnDriverTimeFilter,
+  setCombinedReturnDriverSearch,
+  setCombinedReturnPassengerSearch,
+  resetCombinedFilters,
 } = filterSlice.actions;
 export default filterSlice.reducer;

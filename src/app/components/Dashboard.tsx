@@ -1,8 +1,9 @@
 import { Routes, Route, useNavigate, useLocation, Navigate } from 'react-router-dom';
-import { Route as RouteIcon, LogOut, User, FolderOpen, Settings, ArrowRight, ArrowLeft } from 'lucide-react';
+import { Route as RouteIcon, LogOut, User, FolderOpen, Settings, ArrowRight, ArrowLeft, Combine } from 'lucide-react';
 import { Button } from './ui/button';
 import { CreateRoute } from './CreateRoute';
 import { ReturnRoute } from './ReturnRoute';
+import { CombinedRoute } from './CombinedRoute';
 import { SavedRoutesView } from './SavedRoutesView';
 import { MapboxSettings } from './MapboxSettings';
 import { useAppDispatch, useAppSelector } from '../../store/hooks';
@@ -14,7 +15,7 @@ interface DashboardProps {
   onLogout: () => void;
 }
 
-type MenuItem = 'going' | 'return' | 'saved' | 'settings';
+type MenuItem = 'going' | 'return' | 'combined' | 'saved' | 'settings';
 
 export function Dashboard({ user, onLogout }: DashboardProps) {
   const navigate = useNavigate();
@@ -32,6 +33,7 @@ export function Dashboard({ user, onLogout }: DashboardProps) {
   const menuItems = [
     { id: 'going' as MenuItem, label: 'Going Route', icon: ArrowRight, path: '/dashboard/going' },
     { id: 'return' as MenuItem, label: 'Return Route', icon: ArrowLeft, path: '/dashboard/return' },
+    { id: 'combined' as MenuItem, label: 'Combined Route', icon: Combine, path: '/dashboard/combined' },
     { id: 'saved' as MenuItem, label: 'Saved Routes', icon: FolderOpen, badge: savedRoutes.length, path: '/dashboard/saved' },
     { id: 'settings' as MenuItem, label: 'Mapbox Settings', icon: Settings, path: '/dashboard/settings' },
   ];
@@ -49,7 +51,7 @@ export function Dashboard({ user, onLogout }: DashboardProps) {
     dispatch(toggleRouteVisibility(routeId));
   };
 
-  const handleClearRoutes = (routeType: 'going' | 'return') => {
+  const handleClearRoutes = (routeType: 'going' | 'return' | 'combined') => {
     dispatch(clearRoutesByType(routeType));
   };
 
@@ -133,6 +135,7 @@ export function Dashboard({ user, onLogout }: DashboardProps) {
         <Routes>
           <Route path="going" element={<CreateRoute savedRoutes={savedRoutes} onSaveRoute={handleSaveRoute} />} />
           <Route path="return" element={<ReturnRoute onSaveRoute={handleSaveRoute} />} />
+          <Route path="combined" element={<CombinedRoute savedRoutes={savedRoutes} onSaveRoute={handleSaveRoute} />} />
           <Route
             path="saved"
             element={

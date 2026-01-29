@@ -26,9 +26,15 @@ export interface SavedRoute {
   color: { primary: string; name: string };
   visible: boolean;
   createdAt: string;
-  routeType: 'going' | 'return' | 'pickup';
+  routeType: 'going' | 'return' | 'pickup' | 'combined';
   driverSnapshot?: RouteParticipant;
   passengerSnapshots?: RouteParticipant[];
   date: string;
   shift: string;
+  // Combined route specific fields
+  returnDriverId?: string;
+  returnPassengerIds?: string[];
+  returnRouteInfo?: RouteInfo;
+  returnDriverSnapshot?: RouteParticipant;
+  returnPassengerSnapshots?: RouteParticipant[];
 }

@@ -28,7 +28,7 @@ const routesSlice = createSlice({
     clearAllRoutes: (state) => {
       state.savedRoutes = [];
     },
-    clearRoutesByType: (state, action: PayloadAction<'going' | 'return'>) => {
+    clearRoutesByType: (state, action: PayloadAction<'going' | 'return' | 'combined'>) => {
       state.savedRoutes = state.savedRoutes.filter(route => route.routeType !== action.payload);
     },
   },

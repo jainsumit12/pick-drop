@@ -520,6 +520,22 @@ export function ReturnRoute({ onSaveRoute }: ReturnRouteProps) {
 
   // Document-level handler for passenger selection buttons in popups
   useEffect(() => {
+    const parsePassengerIdsFromAttribute = (value: string | null): string[] => {
+      if (!value) return [];
+      try {
+        const parsed = JSON.parse(value);
+        if (Array.isArray(parsed)) {
+          return parsed.map((id) => String(id).trim()).filter(Boolean);
+        }
+      } catch {
+        // Fallback to comma-separated parsing
+      }
+      return value
+        .split(",")
+        .map((id) => id.trim())
+        .filter(Boolean);
+    };
+
     const handlePassengerButtonClick = (event: MouseEvent) => {
       const target = event.target as HTMLElement;
 
@@ -548,9 +564,10 @@ export function ReturnRoute({ onSaveRoute }: ReturnRouteProps) {
       if (selectAllBtn) {
         event.stopPropagation();
         event.preventDefault();
-        const passengerIdsStr = selectAllBtn.getAttribute("data-passenger-ids");
-        if (!passengerIdsStr) return;
-        const passengerIds = passengerIdsStr.split(",");
+        const passengerIds = parsePassengerIdsFromAttribute(
+          selectAllBtn.getAttribute("data-passenger-ids")
+        );
+        if (passengerIds.length === 0) return;
         const current = selectedPassengersRef.current.map((id) => String(id));
         const allSelected = passengerIds.every((id) => current.includes(id));
 
@@ -573,10 +590,10 @@ export function ReturnRoute({ onSaveRoute }: ReturnRouteProps) {
       if (selectAllHomeBtn) {
         event.stopPropagation();
         event.preventDefault();
-        const passengerIdsStr =
-          selectAllHomeBtn.getAttribute("data-passenger-ids");
-        if (!passengerIdsStr) return;
-        const passengerIds = passengerIdsStr.split(",");
+        const passengerIds = parsePassengerIdsFromAttribute(
+          selectAllHomeBtn.getAttribute("data-passenger-ids")
+        );
+        if (passengerIds.length === 0) return;
         const current = selectedPassengersRef.current.map((id) => String(id));
         const allSelected = passengerIds.every((id) => current.includes(id));
 
@@ -1142,9 +1159,9 @@ export function ReturnRoute({ onSaveRoute }: ReturnRouteProps) {
                 allSelected
                   ? "border-green-200 text-green-700 bg-green-50"
                   : "border-green-600 text-green-600 bg-white hover:bg-green-50"
-              }" data-passenger-ids="${allPassengerIds.join(
-          ","
-        )}" data-all-selected="${allSelected}">
+              }" data-passenger-ids='${JSON.stringify(
+          allPassengerIds.map((id) => String(id))
+        )}' data-all-selected="${allSelected}">
                 ${allSelected ? "Deselect all" : "Select all"}
               </button>
             </div>
@@ -1466,9 +1483,9 @@ export function ReturnRoute({ onSaveRoute }: ReturnRouteProps) {
                 allSelected
                   ? "border-green-200 text-green-700 bg-green-50"
                   : "border-green-600 text-green-600 bg-white hover:bg-green-50"
-              }" data-passenger-ids="${allPassengerIds.join(
-          ","
-        )}" data-all-selected="${allSelected}">
+              }" data-passenger-ids='${JSON.stringify(
+          allPassengerIds.map((id) => String(id))
+        )}' data-all-selected="${allSelected}">
                 ${allSelected ? "Deselect all" : "Select all"}
               </button>
             </div>

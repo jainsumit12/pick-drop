@@ -507,6 +507,22 @@ export function CreateRoute({ savedRoutes, onSaveRoute }: CreateRouteProps) {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
+  const parsePassengerIdsFromAttribute = (value: string | null): string[] => {
+    if (!value) return [];
+    try {
+      const parsed = JSON.parse(value);
+      if (Array.isArray(parsed)) {
+        return parsed.map((id) => String(id).trim()).filter(Boolean);
+      }
+    } catch {
+      // Fall back to comma-separated parsing
+    }
+    return value
+      .split(",")
+      .map((id) => id.trim())
+      .filter(Boolean);
+  };
+
   // Event delegation for passenger toggle buttons in map popups
   useEffect(() => {
     const handlePassengerToggle = (event: MouseEvent) => {
@@ -519,9 +535,10 @@ export function CreateRoute({ savedRoutes, onSaveRoute }: CreateRouteProps) {
       if (selectAllBtn) {
         event.stopPropagation();
         event.preventDefault();
-        const passengerIdsStr = selectAllBtn.getAttribute("data-passenger-ids");
-        if (!passengerIdsStr) return;
-        const passengerIds = passengerIdsStr.split(",");
+        const passengerIds = parsePassengerIdsFromAttribute(
+          selectAllBtn.getAttribute("data-passenger-ids")
+        );
+        if (passengerIds.length === 0) return;
         const current = selectedPassengersRef.current.map((id) => String(id));
         const allSelected = passengerIds.every((id) => current.includes(id));
 
@@ -1140,9 +1157,9 @@ export function CreateRoute({ savedRoutes, onSaveRoute }: CreateRouteProps) {
                 allSelected
                   ? "border-green-200 text-green-700 bg-green-50"
                   : "border-green-600 text-green-600 bg-white hover:bg-green-50"
-              }" data-passenger-ids="${allPassengerIds.join(
-          ","
-        )}" data-all-selected="${allSelected}">
+              }" data-passenger-ids='${JSON.stringify(
+          allPassengerIds.map((id) => String(id))
+        )}' data-all-selected="${allSelected}">
                 ${allSelected ? "Deselect all" : "Select all"}
               </button>
             </div>
@@ -1416,9 +1433,9 @@ export function CreateRoute({ savedRoutes, onSaveRoute }: CreateRouteProps) {
                 allSelected
                   ? "border-orange-200 text-orange-700 bg-orange-50"
                   : "border-orange-600 text-orange-600 bg-white hover:bg-orange-50"
-              }" data-passenger-ids="${allPassengerIds.join(
-          ","
-        )}" data-all-selected="${allSelected}">
+              }" data-passenger-ids='${JSON.stringify(
+          allPassengerIds.map((id) => String(id))
+        )}' data-all-selected="${allSelected}">
                 ${allSelected ? "Deselect all" : "Select all"}
               </button>
             </div>
