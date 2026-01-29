@@ -23,6 +23,7 @@ import {
   Trash,
   Building2,
   Home,
+  UserPlus,
 } from "lucide-react";
 import { driversService, passengersService } from "../../api/services";
 import { RouteParticipant, SavedRoute, RouteInfo } from "../../types/route";
@@ -184,7 +185,7 @@ export function CreateRoute({ savedRoutes, onSaveRoute }: CreateRouteProps) {
     selectedDate,
     selectedShift,
     selectedDriver,
-    selectedPassengers,
+    selectedPassengers: selectedPassengersRaw,
     pickupCityFilter,
     destinationCityFilter,
     timeFilter,
@@ -192,6 +193,16 @@ export function CreateRoute({ savedRoutes, onSaveRoute }: CreateRouteProps) {
     driverSearch,
     passengerSearch,
   } = useAppSelector((state) => state.filters.going);
+
+  const selectedPassengers = Array.isArray(selectedPassengersRaw)
+    ? selectedPassengersRaw
+    : [];
+
+  useEffect(() => {
+    if (!Array.isArray(selectedPassengersRaw)) {
+      dispatch(setGoingPassengers([]));
+    }
+  }, [dispatch, selectedPassengersRaw]);
 
   const setSelectedDriver = (driver: string | null) => {
     dispatch(setGoingDriver(driver));
@@ -248,6 +259,7 @@ export function CreateRoute({ savedRoutes, onSaveRoute }: CreateRouteProps) {
   const [showPassengerDropdown, setShowPassengerDropdown] = useState(false);
   const [showShiftDropdown, setShowShiftDropdown] = useState(false);
   const [showDateDropdown, setShowDateDropdown] = useState(false);
+  const [showOccupiedDropdown, setShowOccupiedDropdown] = useState(false);
 
   // Filter states
   const [checkedDrivers, setCheckedDrivers] = useState<string[]>([]); // Drivers visible on map
@@ -260,6 +272,19 @@ export function CreateRoute({ savedRoutes, onSaveRoute }: CreateRouteProps) {
   const [showClearDialog, setShowClearDialog] = useState(false);
   const [showSaveDialog, setShowSaveDialog] = useState(false);
   const [saveDialogMessage, setSaveDialogMessage] = useState("");
+
+  // Dummy passenger state
+  const [showDummyPassengerModal, setShowDummyPassengerModal] = useState(false);
+  const [dummyPassengerCount, setDummyPassengerCount] = useState(0);
+  const createEmptyRow = () => ({
+    id: `${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+    homeLat: "",
+    homeLog: "",
+  });
+
+  const [dummyPassengerRows, setDummyPassengerRows] = useState([
+    createEmptyRow(),
+  ]);
 
   const shifts = SHIFT_TYPES;
 
@@ -334,8 +359,23 @@ export function CreateRoute({ savedRoutes, onSaveRoute }: CreateRouteProps) {
       .flatMap((route) => route.passengerIds.map((id) => String(id)))
   );
 
-  const availableDrivers = drivers;
+  const usedDriverIds = new Set(
+    savedRoutes
+      .filter((route) => route.routeType === "going")
+      .map((route) => String(route.driverId))
+  );
+
+  const availableDrivers = drivers.filter(
+    (driver) =>
+      !usedDriverIds.has(String(driver.id)) || driver.id === selectedDriver
+  );
+  const occupiedDrivers = drivers.filter(
+    (driver) =>
+      usedDriverIds.has(String(driver.id)) && driver.id !== selectedDriver
+  );
   const currentDriver = availableDrivers.find((d) => d.id === selectedDriver);
+  const occupiedDriverCount = occupiedDrivers.length;
+  const totalDriverCount = drivers.length;
   const normalizedDriverAddress = currentDriver
     ? normalizeAddress(currentDriver.address)
     : null;
@@ -500,6 +540,7 @@ export function CreateRoute({ savedRoutes, onSaveRoute }: CreateRouteProps) {
         setShowPassengerDropdown(false);
         setShowShiftDropdown(false);
         setShowDateDropdown(false);
+        setShowOccupiedDropdown(false);
       }
     };
 
@@ -1853,6 +1894,62 @@ export function CreateRoute({ savedRoutes, onSaveRoute }: CreateRouteProps) {
     setShowClearDialog(false);
   };
 
+  const handleRemoveDummyPassengers = () => {
+    setPassengersData((prev) =>
+      prev.filter((passenger) => !String(passenger.USER_ID).startsWith("DUMMY-"))
+    );
+    const cleanedSelections = selectedPassengers.filter(
+      (id) => !String(id).startsWith("DUMMY-")
+    );
+    setSelectedPassengers(cleanedSelections);
+    setDummyPassengerCount(0);
+  };
+
+  const buildDummyPassenger = (
+    row: (typeof dummyPassengerRows)[number],
+    offset: number
+  ): ShiftPassenger => {
+    const index = dummyPassengerCount + offset + 1;
+    const homeLat = parseCoordinate(row.homeLat);
+    const homeLog = parseCoordinate(row.homeLog);
+    const pickupLat = homeLat ?? 12.9716;
+    const pickupLog = homeLog ?? 77.5946;
+
+    return {
+      USER_ID: `DUMMY-${index}-${Date.now()}`,
+      SHIFT: selectedShift,
+      DATE: selectedDate,
+      TIME: "",
+      NAME: `Dummy Passenger ${index}`,
+      MOBILE: "0000000000",
+      PICKUP_LOCATION: "Dummy Pickup Location",
+      PICKUP_LAT: pickupLat,
+      PICKUP_LOG: pickupLog,
+      PICKUP_SUBPOINT: "Dummy Area",
+      DROP_LOCATION: "Dummy Drop Location",
+      DROP_LAT: 12.9352,
+      DROP_LOG: 77.6245,
+      DROP_SUBPOINT: "Dummy Drop Area",
+    };
+  };
+
+  const removeDummyPassengerRow = (id: string) => {
+    setDummyPassengerRows((prev) =>
+      prev.length === 1 ? prev : prev.filter((row) => row.id !== id)
+    );
+  };
+
+  const handleAddDummyPassengers = () => {
+    const newPassengers = dummyPassengerRows.map((row, index) =>
+      buildDummyPassenger(row, index)
+    );
+    setPassengersData((prev) => [...prev, ...newPassengers]);
+    setDummyPassengerCount((prev) => prev + newPassengers.length);
+
+    setShowDummyPassengerModal(false);
+    setDummyPassengerRows([createEmptyRow()]);
+  };
+
   const fetchRouteParticipants = async () => {
     const requestDate = selectedDate;
     const requestShift = normalizedShift;
@@ -1979,6 +2076,7 @@ export function CreateRoute({ savedRoutes, onSaveRoute }: CreateRouteProps) {
                   setShowShiftDropdown(false);
                   setShowDriverDropdown(false);
                   setShowPassengerDropdown(false);
+                  setShowOccupiedDropdown(false);
                 }}
                 className="flex items-center gap-1 sm:gap-2 px-2 sm:px-3 py-1.5 sm:py-2 bg-white border rounded-lg hover:bg-gray-50 transition-colors text-xs sm:text-sm"
               >
@@ -2058,6 +2156,7 @@ export function CreateRoute({ savedRoutes, onSaveRoute }: CreateRouteProps) {
                   setShowShiftDropdown(!showShiftDropdown);
                   setShowDriverDropdown(false);
                   setShowPassengerDropdown(false);
+                  setShowOccupiedDropdown(false);
                 }}
                 className="flex items-center gap-1 sm:gap-2 px-2 sm:px-3 py-1.5 sm:py-2 bg-white border rounded-lg hover:bg-gray-50 transition-colors text-xs sm:text-sm"
               >
@@ -2114,12 +2213,13 @@ export function CreateRoute({ savedRoutes, onSaveRoute }: CreateRouteProps) {
 
           {/* Driver Selector */}
           <div className="relative dropdown-container">
-            <button
-              onClick={() => {
-                setShowDriverDropdown(!showDriverDropdown);
-                setShowShiftDropdown(false);
-                setShowPassengerDropdown(false);
-              }}
+              <button
+                onClick={() => {
+                  setShowDriverDropdown(!showDriverDropdown);
+                  setShowShiftDropdown(false);
+                  setShowPassengerDropdown(false);
+                  setShowOccupiedDropdown(false);
+                }}
               className="flex items-center gap-1 px-2 py-1.5 sm:py-2 bg-white border rounded-lg hover:bg-gray-50 transition-colors text-xs sm:text-sm"
             >
               <Car className="w-4 h-4 text-blue-600 flex-shrink-0" />
@@ -2347,6 +2447,7 @@ export function CreateRoute({ savedRoutes, onSaveRoute }: CreateRouteProps) {
                 setShowPassengerDropdown(!showPassengerDropdown);
                 setShowShiftDropdown(false);
                 setShowDriverDropdown(false);
+                setShowOccupiedDropdown(false);
               }}
               className="flex items-center gap-1 px-2 py-1.5 sm:py-2 bg-white border rounded-lg hover:bg-gray-50 transition-colors text-xs sm:text-sm"
             >
@@ -2576,8 +2677,84 @@ export function CreateRoute({ savedRoutes, onSaveRoute }: CreateRouteProps) {
             )}
           </div>
 
+          {/* Occupied Selector */}
+          <div className="relative min-w-0 max-w-[100px] sm:max-w-[140px] dropdown-container">
+            <button
+              onClick={() => {
+                setShowOccupiedDropdown(!showOccupiedDropdown);
+                setShowDateDropdown(false);
+                setShowShiftDropdown(false);
+                setShowDriverDropdown(false);
+                setShowPassengerDropdown(false);
+              }}
+              className="flex items-center gap-1 px-2 py-1.5 sm:py-2 bg-white border rounded-lg hover:bg-gray-50 transition-colors text-xs sm:text-sm"
+            >
+              <Car className="w-4 h-4 text-red-600 flex-shrink-0" />
+              <span className="flex-1 text-left truncate hidden lg:block">
+               Occupied 
+              </span>
+              <ChevronDown className="w-3 h-3 text-gray-400 flex-shrink-0" />
+            </button>
+
+            {showOccupiedDropdown && (
+              <div className="absolute top-full mt-1 bg-white border rounded-lg shadow-lg w-80 z-30">
+                <div className="p-3 border-b text-xs text-gray-600">
+                  Not available drivers ({occupiedDriverCount})
+                </div>
+                <div className="max-h-64 overflow-y-auto">
+                  {occupiedDrivers.length === 0 ? (
+                    <div className="px-4 py-6 text-center text-xs text-gray-500">
+                      No not available drivers currently.
+                    </div>
+                  ) : (
+                    occupiedDrivers.map((driver) => (
+                      <div
+                        key={`${driver.id}-occupied`}
+                        className="px-4 py-3 border-b last:border-b-0 text-xs leading-tight"
+                      >
+                        <p className="font-medium text-gray-700 truncate">
+                          {driver.name}
+                        </p>
+                        <p className="text-[11px] text-gray-500">
+                          {driver.id} • {driver.subPoint}
+                        </p>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+
           {/* Actions */}
-          <div className="ml-auto flex items-center gap-1 ">
+          <div className="ml-auto flex items-center gap-2">
+            <div className="hidden sm:flex flex-col text-[10px] uppercase tracking-wider text-gray-500 leading-tight">
+              <span>Quick</span>
+              <span>Action</span>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowDummyPassengerModal(true)}
+              className="h-8 sm:h-9 px-2 sm:px-3 whitespace-nowrap"
+              title="Add Dummy Passenger"
+            >
+              <UserPlus className="w-4 h-4" />
+              <span className="hidden sm:inline ml-1 text-[11px]">
+                Add Dummy Passenger
+              </span>
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={handleRemoveDummyPassengers}
+              className="h-8 sm:h-9 px-2 sm:px-3 text-red-600 hover:text-red-800 border border-transparent hover:border-current"
+              title="Remove Dummy Passengers"
+            >
+              <Trash className="w-4 h-4 mr-1" />
+              <span className="hidden sm:inline text-[11px]">Clear Dummies</span>
+            </Button>
+
             {/* Fetch Data Button */}
             <Button
               variant="outline"
@@ -2824,6 +3001,114 @@ export function CreateRoute({ savedRoutes, onSaveRoute }: CreateRouteProps) {
         onConfirm={handleConfirmClear}
         onCancel={handleCancelClear}
       />
+
+      {/* Dummy Passenger Modal */}
+      {showDummyPassengerModal &&
+        createPortal(
+          <div className="fixed inset-0 z-50 flex items-center justify-center px-4">
+            <div
+              className="absolute inset-0 bg-black/40 backdrop-blur-sm"
+              onClick={() => setShowDummyPassengerModal(false)}
+            ></div>
+            <div className="relative w-full max-w-lg rounded-2xl border bg-white p-6 shadow-2xl max-h-[90vh] overflow-y-auto">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-base font-semibold text-gray-900">
+                  Add Dummy Passenger
+                </h3>
+                <button
+                  onClick={() => setShowDummyPassengerModal(false)}
+                  className="p-1 hover:bg-gray-100 rounded"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              <div className="space-y-4">
+                {dummyPassengerRows.map((row, rowIndex) => (
+                  <div key={row.id} className="border-b pb-3 last:border-b-0 last:pb-0">
+                    <div className="flex items-center justify-between mb-2">
+                      <p className="text-xs font-medium text-gray-700">
+                        Home Location Coordinates {rowIndex + 1}
+                      </p>
+                      {dummyPassengerRows.length > 1 && (
+                        <button
+                          type="button"
+                          onClick={() => removeDummyPassengerRow(row.id)}
+                          className="text-xs text-red-600 hover:text-red-800"
+                        >
+                          Remove
+                        </button>
+                      )}
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-xs text-gray-500 mb-1">
+                          Latitude
+                        </label>
+                        <input
+                          type="text"
+                          placeholder="12.9716"
+                          value={row.homeLat}
+                          onChange={(e) => {
+                            const value = e.target.value;
+                            setDummyPassengerRows((prev) =>
+                              prev.map((item) =>
+                                item.id === row.id ? { ...item, homeLat: value } : item
+                              )
+                            );
+                          }}
+                          className="w-full px-3 py-2 text-sm border rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs text-gray-500 mb-1">
+                          Longitude
+                        </label>
+                        <input
+                          type="text"
+                          placeholder="77.5946"
+                          value={row.homeLog}
+                          onChange={(e) => {
+                            const value = e.target.value;
+                            setDummyPassengerRows((prev) =>
+                              prev.map((item) =>
+                                item.id === row.id ? { ...item, homeLog: value } : item
+                              )
+                            );
+                          }}
+                          className="w-full px-3 py-2 text-sm border rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
+                        />
+                      </div>
+                    </div>
+                    <p className="text-[10px] text-gray-500 mt-2">
+                      Lat/Long here override the pickup coordinate pair.
+                    </p>
+                  </div>
+                ))}
+              </div>
+
+              <div className="mt-5 flex justify-end gap-3">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setShowDummyPassengerModal(false)}
+                  className="h-9"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  size="sm"
+                  onClick={handleAddDummyPassengers}
+                  className="h-9"
+                >
+                  <UserPlus className="w-4 h-4 mr-1" />
+                  Add Passenger
+                </Button>
+              </div>
+            </div>
+          </div>,
+          document.body
+        )}
     </div>
   );
 }
