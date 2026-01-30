@@ -999,7 +999,7 @@ export function CreateRoute({ savedRoutes, onSaveRoute }: CreateRouteProps) {
           width: ${isSelected ? "32px" : "24px"};
           height: ${isSelected ? "32px" : "24px"};
           border-radius: 50%;
-          background-color: ${isDummy ? (isSelected ? "#f97316" : "#fb923c") : (isSelected ? "#3b82f5" : "#629dfc")};
+          background-color: ${isDummy ? (isSelected ? "#000" : "#000") : (isSelected ? "#3b82f5" : "#629dfc")};
           border: ${isSelected ? "3px solid white" : "2px solid white"};
           box-shadow: ${
             isSelected

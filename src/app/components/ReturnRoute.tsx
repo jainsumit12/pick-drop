@@ -1018,8 +1018,8 @@ export function ReturnRoute({ onSaveRoute }: ReturnRouteProps) {
           background-color: ${
             isDummy
               ? isSelected
-                ? "#f97316"
-                : "#fb923c"
+                ? "#000"
+                : "#000"
               : isSelected
               ? "#3b82f5"
               : "#629dfc"

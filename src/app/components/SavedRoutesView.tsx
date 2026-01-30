@@ -1161,7 +1161,29 @@ export function SavedRoutesView({
                   : "border-2 border-gray-200"
               }`}
             >
-              <CardHeader className="pb-3">
+              <CardHeader className="pt-2 pb-3">
+                <div className="flex items-center gap-1 ">
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => onToggleVisibility(route.id)}
+                    title={route.visible ? "Hide route" : "Show route"}
+                  >
+                    {route.visible ? (
+                      <Eye className="w-4 h-4 text-blue-600" />
+                    ) : (
+                      <EyeOff className="w-4 h-4 text-gray-400" />
+                    )}
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => onDeleteRoute(route.id)}
+                    title="Delete route"
+                  >
+                    <Trash2 className="w-4 h-4 text-red-500" />
+                  </Button>
+                </div>
                 <div className="flex items-start justify-between">
                   <button
                     onClick={() => toggleRouteExpansion(route.id)}
@@ -1199,32 +1221,22 @@ export function SavedRoutesView({
                       )}
                     </div>
                   </button>
-                  <div className="flex flex-col items-end gap-1 ml-2">
-                    <div className="flex items-center gap-1">
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        onClick={() => onToggleVisibility(route.id)}
-                        title={route.visible ? "Hide route" : "Show route"}
-                      >
-                        {route.visible ? (
-                          <Eye className="w-4 h-4 text-blue-600" />
-                        ) : (
-                          <EyeOff className="w-4 h-4 text-gray-400" />
-                        )}
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        onClick={() => onDeleteRoute(route.id)}
-                        title="Delete route"
-                      >
-                        <Trash2 className="w-4 h-4 text-red-500" />
-                      </Button>
-                    </div>
-                    <p className="text-xs text-black-600 font-medium flex gap-2">
-                      {passengerDataList.length} <User size={16} />
+                  <div className="text-xs font-medium text-right ml-2">
+                    <p className="flex items-center justify-end gap-1 text-black-600">
+                      {passengerDataList.length} <User size={14} />
                     </p>
+                    {(() => {
+                      const timeCounts: Record<string, number> = {};
+                      passengerDataList.forEach((p) => {
+                        const t = p.time?.slice(0, 5) || "N/A";
+                        timeCounts[t] = (timeCounts[t] || 0) + 1;
+                      });
+                      return Object.entries(timeCounts).map(([time, count]) => (
+                        <p key={time} className="text-xs text-gray-500 flex items-center justify-end gap-1">
+                          {count} <User size={12} /> {time}
+                        </p>
+                      ));
+                    })()}
                   </div>
                 </div>
               </CardHeader>
