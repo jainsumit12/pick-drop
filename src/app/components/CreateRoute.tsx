@@ -993,12 +993,13 @@ export function CreateRoute({ savedRoutes, onSaveRoute }: CreateRouteProps) {
         // Format time for display (show only HH:MM)
         const displayTime = passenger.time ? passenger.time.slice(0, 5) : "";
 
+        const isDummy = String(passenger.id).startsWith("DUMMY-");
         el.innerHTML = `
         <div style="
           width: ${isSelected ? "32px" : "24px"};
           height: ${isSelected ? "32px" : "24px"};
           border-radius: 50%;
-          background-color: ${isSelected ? "#3b82f5" : "#629dfc"};
+          background-color: ${isDummy ? (isSelected ? "#f97316" : "#fb923c") : (isSelected ? "#3b82f5" : "#629dfc")};
           border: ${isSelected ? "3px solid white" : "2px solid white"};
           box-shadow: ${
             isSelected
@@ -1104,11 +1105,12 @@ export function CreateRoute({ savedRoutes, onSaveRoute }: CreateRouteProps) {
         return;
       }
 
+      const allDummy = passengersAtPickup.every((p) => String(p.id).startsWith("DUMMY-"));
       const pickupEl = document.createElement("div");
       pickupEl.style.width = "32px";
       pickupEl.style.height = "32px";
       pickupEl.style.borderRadius = "50%";
-      pickupEl.style.backgroundColor = "#3b82f5";
+      pickupEl.style.backgroundColor = allDummy ? "#f97316" : "#3b82f5";
       pickupEl.style.border = "3px solid white";
       pickupEl.style.boxShadow = "0 4px 8px rgba(0,0,0,0.3)";
       pickupEl.style.display = "flex";
@@ -3116,6 +3118,9 @@ export function CreateRoute({ savedRoutes, onSaveRoute }: CreateRouteProps) {
                   size="sm"
                   onClick={handleAddDummyPassengers}
                   className="h-9"
+                  disabled={dummyPassengerRows.some(
+                    (row) => !row.homeLat.trim() || !row.homeLog.trim()
+                  )}
                 >
                   <UserPlus className="w-4 h-4 mr-1" />
                   Add Passenger

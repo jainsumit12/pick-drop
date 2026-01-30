@@ -310,12 +310,15 @@ export function ReturnRoute({ onSaveRoute }: ReturnRouteProps) {
   const [showSaveDialog, setShowSaveDialog] = useState(false);
   const [saveDialogMessage, setSaveDialogMessage] = useState("");
 
-  const [returnDummyPassengerForm, setReturnDummyPassengerForm] = useState({
+  const createEmptyRow = () => ({
+    id: `${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
     homeLat: "",
     homeLog: "",
   });
-  const [returnDummyPassengerCount, setReturnDummyPassengerCount] =
-    useState(0);
+  const [dummyPassengerRows, setDummyPassengerRows] = useState([
+    createEmptyRow(),
+  ]);
+  const [returnDummyPassengerCount, setReturnDummyPassengerCount] = useState(0);
 
   const shifts = SHIFT_TYPES;
 
@@ -385,11 +388,12 @@ export function ReturnRoute({ onSaveRoute }: ReturnRouteProps) {
   const usedPassengerIds = new Set(
     storedRoutes
       .filter((route) => route.routeType === "return")
-      .flatMap((route) => route.passengerIds.map(id => String(id)))
+      .flatMap((route) => route.passengerIds.map((id) => String(id)))
   );
 
   const occupiedDrivers = drivers.filter(
-    (driver) => usedDriverIds.has(String(driver.id)) && driver.id !== selectedDriver
+    (driver) =>
+      usedDriverIds.has(String(driver.id)) && driver.id !== selectedDriver
   );
   const availableDrivers = drivers.filter(
     (driver) =>
@@ -532,14 +536,13 @@ export function ReturnRoute({ onSaveRoute }: ReturnRouteProps) {
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       const target = event.target as HTMLElement;
-        if (!target.closest(".dropdown-container")) {
-          setShowDriverDropdown(false);
-          setShowPassengerDropdown(false);
-          setShowShiftDropdown(false);
-          setShowDateDropdown(false);
-          setShowOccupiedDropdown(false);
-          setShowDummyPassengerModal(false);
-        }
+      if (!target.closest(".dropdown-container")) {
+        setShowDriverDropdown(false);
+        setShowPassengerDropdown(false);
+        setShowShiftDropdown(false);
+        setShowDateDropdown(false);
+        setShowOccupiedDropdown(false);
+      }
     };
 
     document.addEventListener("mousedown", handleClickOutside);
@@ -814,14 +817,22 @@ export function ReturnRoute({ onSaveRoute }: ReturnRouteProps) {
                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="white"><path d="M18.92 6.01C18.72 5.42 18.16 5 17.5 5h-11c-.66 0-1.21.42-1.42 1.01L3 12v8c0 .55.45 1 1 1h1c.55 0 1-.45 1-1v-1h12v1c0 .55.45 1 1 1h1c.55 0 1-.45 1-1v-8l-2.08-5.99zM6.5 16c-.83 0-1.5-.67-1.5-1.5S5.67 13 6.5 13s1.5.67 1.5 1.5S7.33 16 6.5 16zm11 0c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zM5 11l1.5-4.5h11L19 11H5z"/></svg>
               </div>
               <div class="min-w-0 flex-1">
-                <strong class="block truncate">${driver.name}, ${driver.id}</strong>
+                <strong class="block truncate">${driver.name}, ${
+              driver.id
+            }</strong>
                 <span class="text-xs ${
                   isSelected ? "text-blue-600 font-bold" : "text-blue-600"
-                }">${isSelected ? "SELECTED DRIVER" : "DRIVER"}, ${driver.time || ""}</span>
+                }">${isSelected ? "SELECTED DRIVER" : "DRIVER"}, ${
+              driver.time || ""
+            }</span>
               </div>
             </div>
-            <p class="text-xs text-gray-600 mb-1"><strong>Location:</strong> ${driver.subPoint || "N/A"}</p>
-            <p class="text-xs text-gray-600 mb-1"><strong>Phone:</strong> ${driver.phone || "N/A"}</p>
+            <p class="text-xs text-gray-600 mb-1"><strong>Location:</strong> ${
+              driver.subPoint || "N/A"
+            }</p>
+            <p class="text-xs text-gray-600 mb-1"><strong>Phone:</strong> ${
+              driver.phone || "N/A"
+            }</p>
             <p class="text-xs text-gray-500 mb-2">${driver.address || ""}</p>
             <button class="driver-select px-2 py-1 text-xs rounded border ${
               isSelected
@@ -998,12 +1009,21 @@ export function ReturnRoute({ onSaveRoute }: ReturnRouteProps) {
         workEl.style.alignItems = "center";
         workEl.style.cursor = "pointer";
         workEl.style.transition = "all 0.2s";
+        const isDummy = String(passenger.id).startsWith("DUMMY-");
         workEl.innerHTML = `
         <div style="
           width: ${isSelected ? "32px" : "24px"};
           height: ${isSelected ? "32px" : "24px"};
           border-radius: 50%;
-          background-color: ${isSelected ? "#3b82f5" : "#629dfc"};
+          background-color: ${
+            isDummy
+              ? isSelected
+                ? "#f97316"
+                : "#fb923c"
+              : isSelected
+              ? "#3b82f5"
+              : "#629dfc"
+          };
           border: ${isSelected ? "3px solid white" : "2px solid white"};
           box-shadow: ${
             isSelected
@@ -1018,8 +1038,8 @@ export function ReturnRoute({ onSaveRoute }: ReturnRouteProps) {
           <svg xmlns="http://www.w3.org/2000/svg" width="${
             isSelected ? "16" : "12"
           }" height="${
-            isSelected ? "16" : "12"
-          }" viewBox="0 0 24 24" fill="white"><path d="M12 7V3H2v18h20V7H12zM6 19H4v-2h2v2zm0-4H4v-2h2v2zm0-4H4V9h2v2zm0-4H4V5h2v2zm4 12H8v-2h2v2zm0-4H8v-2h2v2zm0-4H8V9h2v2zm0-4H8V5h2v2zm10 12h-8v-2h2v-2h-2v-2h2v-2h-2V9h8v10zm-2-8h-2v2h2v-2zm0 4h-2v2h2v-2z"/></svg>
+          isSelected ? "16" : "12"
+        }" viewBox="0 0 24 24" fill="white"><path d="M12 7V3H2v18h20V7H12zM6 19H4v-2h2v2zm0-4H4v-2h2v2zm0-4H4V9h2v2zm0-4H4V5h2v2zm4 12H8v-2h2v2zm0-4H8v-2h2v2zm0-4H8V9h2v2zm0-4H8V5h2v2zm10 12h-8v-2h2v-2h-2v-2h2v-2h-2V9h8v10zm-2-8h-2v2h2v-2zm0 4h-2v2h2v-2z"/></svg>
         </div>
         ${
           displayTime
@@ -1052,16 +1072,26 @@ export function ReturnRoute({ onSaveRoute }: ReturnRouteProps) {
                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="white"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>
               </div>
               <div>
-                <strong class="block">${passenger.name}, ${passenger.id}</strong>
+                <strong class="block">${passenger.name}, ${
+          passenger.id
+        }</strong>
                 <span class="text-xs ${
                   isSelected ? "text-green-600 font-bold" : "text-green-600"
-                }">${isSelected ? "SELECTED PICKUP" : "PICKUP"}, ${passenger.time || ""}</span>
+                }">${isSelected ? "SELECTED PICKUP" : "PICKUP"}, ${
+          passenger.time || ""
+        }</span>
               </div>
             </div>
-            <p class="text-xs text-gray-600 mb-1"><strong>Location:</strong> ${passenger.subPoint || "N/A"}</p>
-            <p class="text-xs text-gray-600 mb-1"><strong>Phone:</strong> ${passenger.phone}</p>
+            <p class="text-xs text-gray-600 mb-1"><strong>Location:</strong> ${
+              passenger.subPoint || "N/A"
+            }</p>
+            <p class="text-xs text-gray-600 mb-1"><strong>Phone:</strong> ${
+              passenger.phone
+            }</p>
             <p class="text-xs text-gray-500 mb-2">${passenger.address || ""}</p>
-            <p class="text-xs text-gray-500 mb-2"><strong>Drop Location:</strong> ${passenger.destination || ""}</p>
+            <p class="text-xs text-gray-500 mb-2"><strong>Drop Location:</strong> ${
+              passenger.destination || ""
+            }</p>
             ${
               passenger.destinationSubPoint
                 ? `<p class="text-xs text-orange-600 font-medium"><strong>Destination:</strong> ${passenger.destinationSubPoint}</p>`
@@ -1092,11 +1122,14 @@ export function ReturnRoute({ onSaveRoute }: ReturnRouteProps) {
         return;
       }
 
+      const allDummy = passengersAtWork.every((p) =>
+        String(p.id).startsWith("DUMMY-")
+      );
       const workEl = document.createElement("div");
       workEl.style.width = "32px";
       workEl.style.height = "32px";
       workEl.style.borderRadius = "50%";
-      workEl.style.backgroundColor = "#3b82f5";
+      workEl.style.backgroundColor = allDummy ? "#f97316" : "#3b82f5";
       workEl.style.border = "3px solid white";
       workEl.style.boxShadow = "0 4px 8px rgba(0,0,0,0.3)";
       workEl.style.display = "flex";
@@ -1292,14 +1325,17 @@ export function ReturnRoute({ onSaveRoute }: ReturnRouteProps) {
       markersRef.current.push(workMarker);
     });
 
+    // Group selected passengers by destination coordinates for drop-off markers
     const homeGroups = new Map<string, Location[]>();
     filteredPassengers.forEach((passenger) => {
-      if (!passenger.destinationCoordinates) return;
-      const coordKey = `${passenger.destinationCoordinates[0]},${passenger.destinationCoordinates[1]}`;
-      if (!homeGroups.has(coordKey)) {
-        homeGroups.set(coordKey, []);
+      const isSelected = selectedPassengers.map((s) => String(s)).includes(String(passenger.id));
+      if (passenger.destinationCoordinates && isSelected) {
+        const coordKey = `${passenger.destinationCoordinates[0]},${passenger.destinationCoordinates[1]}`;
+        if (!homeGroups.has(coordKey)) {
+          homeGroups.set(coordKey, []);
+        }
+        homeGroups.get(coordKey)!.push(passenger);
       }
-      homeGroups.get(coordKey)!.push(passenger);
     });
 
     homeGroups.forEach((passengersAtHome, coordKey) => {
@@ -1321,12 +1357,21 @@ export function ReturnRoute({ onSaveRoute }: ReturnRouteProps) {
         homeEl.style.cursor = "pointer";
         homeEl.style.transition = "all 0.2s";
 
+        const isDummyHome = String(passenger.id).startsWith("DUMMY-");
         homeEl.innerHTML = `
           <div style="
             width: ${isSelected ? "28px" : "22px"};
             height: ${isSelected ? "28px" : "22px"};
             border-radius: 50%;
-            background-color: ${isSelected ? "#3b82f5" : "#629dfc"};
+            background-color: ${
+              isDummyHome
+                ? isSelected
+                  ? "#f97316"
+                  : "#fb923c"
+                : isSelected
+                ? "#3b82f5"
+                : "#629dfc"
+            };
             border: ${isSelected ? "3px solid white" : "2px solid white"};
             box-shadow: ${
               isSelected
@@ -1342,8 +1387,8 @@ export function ReturnRoute({ onSaveRoute }: ReturnRouteProps) {
             <svg xmlns="http://www.w3.org/2000/svg" width="${
               isSelected ? "14" : "10"
             }" height="${
-              isSelected ? "14" : "10"
-            }" viewBox="0 0 24 24" fill="white"><path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z"/></svg>
+          isSelected ? "14" : "10"
+        }" viewBox="0 0 24 24" fill="white"><path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z"/></svg>
           </div>
           ${
             displayTime
@@ -1376,16 +1421,28 @@ export function ReturnRoute({ onSaveRoute }: ReturnRouteProps) {
                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="white"><path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z"/></svg>
               </div>
               <div>
-                <strong class="block">${passenger.name}, ${passenger.id}</strong>
+                <strong class="block">${passenger.name}, ${
+          passenger.id
+        }</strong>
                 <span class="text-xs ${
                   isSelected ? "text-green-600 font-bold" : "text-green-600"
-                }">${isSelected ? "SELECTED DROP" : "DROP"}, ${passenger.time || ""}</span>
+                }">${isSelected ? "SELECTED DROP" : "DROP"}, ${
+          passenger.time || ""
+        }</span>
               </div>
             </div>
-            <p class="text-xs text-gray-600 mb-1"><strong>Location:</strong> ${passenger.destinationSubPoint || "N/A"}</p>
-            <p class="text-xs text-gray-600 mb-1"><strong>Phone:</strong> ${passenger.phone}</p>
-            <p class="text-xs text-gray-500 mb-2">${passenger.destination || ""}</p>
-            <p class="text-xs text-gray-500 mb-2"><strong>Pickup Location:</strong> ${passenger.address || ""}</p>
+            <p class="text-xs text-gray-600 mb-1"><strong>Location:</strong> ${
+              passenger.destinationSubPoint || "N/A"
+            }</p>
+            <p class="text-xs text-gray-600 mb-1"><strong>Phone:</strong> ${
+              passenger.phone
+            }</p>
+            <p class="text-xs text-gray-500 mb-2">${
+              passenger.destination || ""
+            }</p>
+            <p class="text-xs text-gray-500 mb-2"><strong>Pickup Location:</strong> ${
+              passenger.address || ""
+            }</p>
             ${
               passenger.subPoint
                 ? `<p class="text-xs text-orange-600 font-medium"><strong>Pickup:</strong> ${passenger.subPoint}</p>`
@@ -1416,11 +1473,14 @@ export function ReturnRoute({ onSaveRoute }: ReturnRouteProps) {
         return;
       }
 
+      const allDummyHome = passengersAtHome.every((p) =>
+        String(p.id).startsWith("DUMMY-")
+      );
       const homeEl = document.createElement("div");
       homeEl.style.width = "28px";
       homeEl.style.height = "28px";
       homeEl.style.borderRadius = "50%";
-      homeEl.style.backgroundColor = "#629dfc";
+      homeEl.style.backgroundColor = allDummyHome ? "#fb923c" : "#629dfc";
       homeEl.style.border = "3px solid white";
       homeEl.style.boxShadow = "0 4px 8px rgba(0,0,0,0.3)";
       homeEl.style.display = "flex";
@@ -1836,15 +1896,18 @@ export function ReturnRoute({ onSaveRoute }: ReturnRouteProps) {
     setShowClearDialog(false);
   };
 
-  const buildReturnDummyPassenger = (): ShiftPassenger => {
-    const index = returnDummyPassengerCount + 1;
-    const homeLat = parseCoordinate(returnDummyPassengerForm.homeLat);
-    const homeLog = parseCoordinate(returnDummyPassengerForm.homeLog);
-    const pickupLat = homeLat ?? 12.9716;
-    const pickupLog = homeLog ?? 77.5946;
+  const buildReturnDummyPassenger = (
+    row: (typeof dummyPassengerRows)[number],
+    offset: number
+  ): ShiftPassenger => {
+    const index = returnDummyPassengerCount + offset + 1;
+    const homeLat = parseCoordinate(row.homeLat);
+    const homeLog = parseCoordinate(row.homeLog);
+    const pickupLat = homeLat;
+    const pickupLog = homeLog;
 
     return {
-      USER_ID: `RETURN-DUMMY-${index}-${Date.now()}`,
+      USER_ID: `DUMMY-${index}-${Date.now()}`,
       SHIFT: selectedShift,
       DATE: selectedDate,
       TIME: "",
@@ -1855,29 +1918,36 @@ export function ReturnRoute({ onSaveRoute }: ReturnRouteProps) {
       PICKUP_LOG: pickupLog,
       PICKUP_SUBPOINT: "Factory Area",
       DROP_LOCATION: "Dummy Drop Location",
-      DROP_LAT: 12.9352,
-      DROP_LOG: 77.6245,
+      DROP_LAT: pickupLat,
+      DROP_LOG: pickupLog,
       DROP_SUBPOINT: "Home Area",
     };
   };
 
-  const handleAddReturnDummyPassenger = () => {
-    const dummyPassenger = buildReturnDummyPassenger();
-    setPassengersData((prev) => [...prev, dummyPassenger]);
-    setReturnDummyPassengerCount((prev) => prev + 1);
+  const removeDummyPassengerRow = (id: string) => {
+    setDummyPassengerRows((prev) =>
+      prev.length === 1 ? prev : prev.filter((row) => row.id !== id)
+    );
+  };
+
+  const handleAddDummyPassengers = () => {
+    const newPassengers = dummyPassengerRows.map((row, index) =>
+      buildReturnDummyPassenger(row, index)
+    );
+    setPassengersData((prev) => [...prev, ...newPassengers]);
+    setReturnDummyPassengerCount((prev) => prev + newPassengers.length);
     setShowDummyPassengerModal(false);
-    setReturnDummyPassengerForm({
-      homeLat: "",
-      homeLog: "",
-    });
+    setDummyPassengerRows([createEmptyRow()]);
   };
 
   const handleRemoveReturnDummyPassengers = () => {
     setPassengersData((prev) =>
-      prev.filter((passenger) => !String(passenger.USER_ID).startsWith("RETURN-DUMMY-"))
+      prev.filter(
+        (passenger) => !String(passenger.USER_ID).startsWith("DUMMY-")
+      )
     );
     const cleanedSelections = selectedPassengers.filter(
-      (id) => !String(id).startsWith("RETURN-DUMMY-")
+      (id) => !String(id).startsWith("DUMMY-")
     );
     dispatch(setReturnPassengers(cleanedSelections));
     setReturnDummyPassengerCount(0);
@@ -2138,25 +2208,25 @@ export function ReturnRoute({ onSaveRoute }: ReturnRouteProps) {
                 Updated {lastFetchedLabel}
               </span>
             )}
-          <div className="flex items-center gap-2 sm:gap-3 whitespace-nowrap">
-            <div className="flex items-center gap-1">
-              <Car className="w-3 h-3 text-blue-600" />
-              <div className="flex flex-col text-sm leading-tight">
+            <div className="flex items-center gap-2 sm:gap-3 whitespace-nowrap">
+              <div className="flex items-center gap-1">
+                <Car className="w-3 h-3 text-blue-600" />
+                <div className="flex flex-col text-sm leading-tight">
+                  <span className="font-semibold text-gray-600">
+                    {displayDriverCount}
+                  </span>
+                  <span className="text-[9px] text-gray-400">
+                    {displayDriverCount} free / {totalDriverCount} total
+                  </span>
+                </div>
+              </div>
+              <div className="flex items-center gap-1">
+                <Users className="w-3 h-3 text-green-600" />
                 <span className="font-semibold text-gray-600">
-                  {displayDriverCount}
-                </span>
-                <span className="text-[9px] text-gray-400">
-                  {displayDriverCount} free / {totalDriverCount} total
+                  {displayPassengerCount}
                 </span>
               </div>
             </div>
-            <div className="flex items-center gap-1">
-              <Users className="w-3 h-3 text-green-600" />
-              <span className="font-semibold text-gray-600">
-                {displayPassengerCount}
-              </span>
-            </div>
-          </div>
           </div>
 
           {/* Driver Selector */}
@@ -2525,8 +2595,8 @@ export function ReturnRoute({ onSaveRoute }: ReturnRouteProps) {
                     timeFilter.length > 0) && (
                     <div className="mt-2 flex items-center justify-between">
                       <p className="text-xs text-gray-500">
-                        {filteredPassengers.length} of {availablePassengers.length}{" "}
-                        passengers
+                        {filteredPassengers.length} of{" "}
+                        {availablePassengers.length} passengers
                       </p>
                       <button
                         onClick={() => {
@@ -2562,7 +2632,9 @@ export function ReturnRoute({ onSaveRoute }: ReturnRouteProps) {
                       >
                         <input
                           type="checkbox"
-                          checked={selectedPassengers.map(s => String(s)).includes(String(passenger.id))}
+                          checked={selectedPassengers
+                            .map((s) => String(s))
+                            .includes(String(passenger.id))}
                           onChange={() => togglePassenger(passenger.id)}
                           className="w-4 h-4 text-green-600 rounded focus:ring-green-500"
                         />
@@ -2669,8 +2741,6 @@ export function ReturnRoute({ onSaveRoute }: ReturnRouteProps) {
               </div>
             )}
           </div>
-
-         
 
           {/* Route Info Display */}
 
@@ -2922,7 +2992,7 @@ export function ReturnRoute({ onSaveRoute }: ReturnRouteProps) {
               className="absolute inset-0 bg-black/40 backdrop-blur-sm"
               onClick={() => setShowDummyPassengerModal(false)}
             ></div>
-            <div className="relative w-full max-w-md rounded-2xl border bg-white p-6 shadow-2xl max-h-[90vh] overflow-y-auto">
+            <div className="relative w-full max-w-lg rounded-2xl border bg-white p-6 shadow-2xl max-h-[90vh] overflow-y-auto">
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-base font-semibold text-gray-900">
                   Add Dummy Passenger
@@ -2934,52 +3004,78 @@ export function ReturnRoute({ onSaveRoute }: ReturnRouteProps) {
                   <X className="w-4 h-4" />
                 </button>
               </div>
+
               <div className="space-y-4">
-                <div>
-                  <p className="text-xs font-medium text-gray-700 mb-2">
-                    Home Location Coordinates
-                  </p>
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label className="block text-xs text-gray-500 mb-1">
-                        Latitude
-                      </label>
-                      <input
-                        type="text"
-                        placeholder="12.9716"
-                        value={returnDummyPassengerForm.homeLat}
-                        onChange={(e) =>
-                          setReturnDummyPassengerForm((prev) => ({
-                            ...prev,
-                            homeLat: e.target.value,
-                          }))
-                        }
-                        className="w-full px-3 py-2 text-sm border rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
-                      />
+                {dummyPassengerRows.map((row, rowIndex) => (
+                  <div
+                    key={row.id}
+                    className="border-b pb-3 last:border-b-0 last:pb-0"
+                  >
+                    <div className="flex items-center justify-between mb-2">
+                      <p className="text-xs font-medium text-gray-700">
+                        Home Location Coordinates {rowIndex + 1}
+                      </p>
+                      {dummyPassengerRows.length > 1 && (
+                        <button
+                          type="button"
+                          onClick={() => removeDummyPassengerRow(row.id)}
+                          className="text-xs text-red-600 hover:text-red-800"
+                        >
+                          Remove
+                        </button>
+                      )}
                     </div>
-                    <div>
-                      <label className="block text-xs text-gray-500 mb-1">
-                        Longitude
-                      </label>
-                      <input
-                        type="text"
-                        placeholder="77.5946"
-                        value={returnDummyPassengerForm.homeLog}
-                        onChange={(e) =>
-                          setReturnDummyPassengerForm((prev) => ({
-                            ...prev,
-                            homeLog: e.target.value,
-                          }))
-                        }
-                        className="w-full px-3 py-2 text-sm border rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
-                      />
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-xs text-gray-500 mb-1">
+                          Latitude
+                        </label>
+                        <input
+                          type="text"
+                          placeholder="12.9716"
+                          value={row.homeLat}
+                          onChange={(e) => {
+                            const value = e.target.value;
+                            setDummyPassengerRows((prev) =>
+                              prev.map((item) =>
+                                item.id === row.id
+                                  ? { ...item, homeLat: value }
+                                  : item
+                              )
+                            );
+                          }}
+                          className="w-full px-3 py-2 text-sm border rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs text-gray-500 mb-1">
+                          Longitude
+                        </label>
+                        <input
+                          type="text"
+                          placeholder="77.5946"
+                          value={row.homeLog}
+                          onChange={(e) => {
+                            const value = e.target.value;
+                            setDummyPassengerRows((prev) =>
+                              prev.map((item) =>
+                                item.id === row.id
+                                  ? { ...item, homeLog: value }
+                                  : item
+                              )
+                            );
+                          }}
+                          className="w-full px-3 py-2 text-sm border rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
+                        />
+                      </div>
                     </div>
+                    <p className="text-[10px] text-gray-500 mt-2">
+                      Lat/Long here override the pickup coordinate pair.
+                    </p>
                   </div>
-                  <p className="text-[10px] text-gray-500 mt-2">
-                    Lat/Long here override the pickup coordinate pair.
-                  </p>
-                </div>
+                ))}
               </div>
+
               <div className="mt-5 flex justify-end gap-3">
                 <Button
                   variant="outline"
@@ -2991,8 +3087,11 @@ export function ReturnRoute({ onSaveRoute }: ReturnRouteProps) {
                 </Button>
                 <Button
                   size="sm"
-                  onClick={handleAddReturnDummyPassenger}
+                  onClick={handleAddDummyPassengers}
                   className="h-9"
+                  disabled={dummyPassengerRows.some(
+                    (row) => !row.homeLat.trim() || !row.homeLog.trim()
+                  )}
                 >
                   <UserPlus className="w-4 h-4 mr-1" />
                   Add Passenger
