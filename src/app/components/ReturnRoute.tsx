@@ -1129,7 +1129,7 @@ export function ReturnRoute({ onSaveRoute }: ReturnRouteProps) {
       workEl.style.width = "32px";
       workEl.style.height = "32px";
       workEl.style.borderRadius = "50%";
-      workEl.style.backgroundColor = allDummy ? "#f97316" : "#3b82f5";
+      workEl.style.backgroundColor = allDummy ? "#000000" : "#3b82f5";
       workEl.style.border = "3px solid white";
       workEl.style.boxShadow = "0 4px 8px rgba(0,0,0,0.3)";
       workEl.style.display = "flex";
@@ -1325,11 +1325,10 @@ export function ReturnRoute({ onSaveRoute }: ReturnRouteProps) {
       markersRef.current.push(workMarker);
     });
 
-    // Group selected passengers by destination coordinates for drop-off markers
+    // Group passengers by destination coordinates for drop-off markers
     const homeGroups = new Map<string, Location[]>();
     filteredPassengers.forEach((passenger) => {
-      const isSelected = selectedPassengers.map((s) => String(s)).includes(String(passenger.id));
-      if (passenger.destinationCoordinates && isSelected) {
+      if (passenger.destinationCoordinates) {
         const coordKey = `${passenger.destinationCoordinates[0]},${passenger.destinationCoordinates[1]}`;
         if (!homeGroups.has(coordKey)) {
           homeGroups.set(coordKey, []);
@@ -1365,9 +1364,7 @@ export function ReturnRoute({ onSaveRoute }: ReturnRouteProps) {
             border-radius: 50%;
             background-color: ${
               isDummyHome
-                ? isSelected
-                  ? "#f97316"
-                  : "#fb923c"
+                ? "#000000"
                 : isSelected
                 ? "#3b82f5"
                 : "#629dfc"
@@ -1480,7 +1477,7 @@ export function ReturnRoute({ onSaveRoute }: ReturnRouteProps) {
       homeEl.style.width = "28px";
       homeEl.style.height = "28px";
       homeEl.style.borderRadius = "50%";
-      homeEl.style.backgroundColor = allDummyHome ? "#fb923c" : "#629dfc";
+      homeEl.style.backgroundColor = allDummyHome ? "#000000" : "#629dfc";
       homeEl.style.border = "3px solid white";
       homeEl.style.boxShadow = "0 4px 8px rgba(0,0,0,0.3)";
       homeEl.style.display = "flex";

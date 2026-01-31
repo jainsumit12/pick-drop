@@ -1924,6 +1924,8 @@ export function CreateRoute({ savedRoutes, onSaveRoute }: CreateRouteProps) {
     const homeLog = parseCoordinate(row.homeLog);
     const pickupLat = homeLat ?? 12.9716;
     const pickupLog = homeLog ?? 77.5946;
+    const dropLat = pickupLat;
+    const dropLog = pickupLog;
 
     return {
       USER_ID: `DUMMY-${index}-${Date.now()}`,
@@ -1937,8 +1939,8 @@ export function CreateRoute({ savedRoutes, onSaveRoute }: CreateRouteProps) {
       PICKUP_LOG: pickupLog,
       PICKUP_SUBPOINT: "Dummy Area",
       DROP_LOCATION: "Dummy Drop Location",
-      DROP_LAT: 12.9352,
-      DROP_LOG: 77.6245,
+      DROP_LAT: dropLat,
+      DROP_LOG: dropLog,
       DROP_SUBPOINT: "Dummy Drop Area",
     };
   };
