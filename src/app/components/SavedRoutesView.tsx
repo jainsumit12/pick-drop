@@ -19,6 +19,7 @@ import {
   FileDown,
   MoveLeft,
   MoveRight,
+  Pencil,
 } from "lucide-react";
 import goingDriversData from "../../data/going-drivers.json";
 import returnDriversData from "../../data/return-drivers.json";
@@ -33,6 +34,7 @@ interface SavedRoutesViewProps {
   onDeleteRoute: (routeId: string) => void;
   onToggleVisibility: (routeId: string) => void;
   onClearRoutes?: (routeType: "going" | "return") => void;
+  onEditRoute?: (route: SavedRoute) => void;
 }
 
 interface Location {
@@ -238,11 +240,25 @@ const convertReturnPassengersToLocations = (
   return allLocations;
 };
 
+const ROUTE_COLORS = [
+  { primary: "#3b82f6", name: "Blue" },
+  { primary: "#8b5cf6", name: "Purple" },
+  { primary: "#ec4899", name: "Pink" },
+  { primary: "#f59e0b", name: "Orange" },
+  { primary: "#10b981", name: "Green" },
+  { primary: "#ef4444", name: "Red" },
+  { primary: "#06b6d4", name: "Cyan" },
+  { primary: "#f97316", name: "Dark Orange" },
+  { primary: "#14b8a6", name: "Teal" },
+  { primary: "#a855f7", name: "Violet" },
+];
+
 export function SavedRoutesView({
   savedRoutes,
   onDeleteRoute,
   onToggleVisibility,
   onClearRoutes,
+  onEditRoute,
 }: SavedRoutesViewProps) {
   const mapContainer = useRef<HTMLDivElement>(null);
   const map = useRef<mapboxgl.Map | null>(null);
@@ -372,7 +388,7 @@ export function SavedRoutesView({
             "line-cap": "round",
           },
           paint: {
-            "line-color": route.color.primary,
+            "line-color": getRouteColor(route).primary,
             "line-width": 4,
             "line-opacity": 0.75,
           },
@@ -415,12 +431,12 @@ export function SavedRoutesView({
             new mapboxgl.Popup().setHTML(`
             <div class="p-2">
               <div class="flex items-center gap-2 mb-2">
-                <div class="w-8 h-8 rounded-full flex items-center justify-center" style="background-color: ${route.color.primary}">
+                <div class="w-8 h-8 rounded-full flex items-center justify-center" style="background-color: ${getRouteColor(route).primary}">
                   <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="white"><path d="M18.92 6.01C18.72 5.42 18.16 5 17.5 5h-11c-.66 0-1.21.42-1.42 1.01L3 12v8c0 .55.45 1 1 1h1c.55 0 1-.45 1-1v-1h12v1c0 .55.45 1 1 1h1c.55 0 1-.45 1-1v-8l-2.08-5.99zM6.5 16c-.83 0-1.5-.67-1.5-1.5S5.67 13 6.5 13s1.5.67 1.5 1.5S7.33 16 6.5 16zm11 0c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zM5 11l1.5-4.5h11L19 11H5z"/></svg>
                 </div>
                 <div>
                   <strong class="block">${driverData.name}</strong>
-                  <span class="text-xs font-bold" style="color: ${route.color.primary}">DRIVER - ${route.name}</span>
+                  <span class="text-xs font-bold" style="color: ${getRouteColor(route).primary}">DRIVER - ${route.name}</span>
                 </div>
               </div>
               <p class="text-xs text-gray-600 mb-1"><strong>Location:</strong> ${driverData.subPoint}</p>
@@ -453,7 +469,9 @@ export function SavedRoutesView({
         const coordinates: [number, number] = [lng, lat];
         const passengerCount = passengersAtPickup.length;
         const firstPassenger = passengersAtPickup[0];
-        const displayTime = firstPassenger.time ? firstPassenger.time.slice(0, 5) : "";
+        const displayTime = firstPassenger.time
+          ? firstPassenger.time.slice(0, 5)
+          : "";
 
         const el = document.createElement("div");
         el.style.display = "flex";
@@ -482,7 +500,9 @@ export function SavedRoutesView({
                 <div style="position: absolute; top: -6px; right: -6px; background: #0f172a; color: white; font-size: 10px; font-weight: bold; width: 18px; height: 18px; border-radius: 50%; display: flex; align-items: center; justify-content: center; border: 2px solid white;">${passengerCount}</div>
               </div>
             </div>
-            ${displayTime ? `<div style="
+            ${
+              displayTime
+                ? `<div style="
               background-color: #036ffc;
               color: white;
               font-size: 9px;
@@ -492,7 +512,9 @@ export function SavedRoutesView({
               margin-top: 2px;
               white-space: nowrap;
               box-shadow: 0 1px 3px rgba(0,0,0,0.3);
-            ">${displayTime}</div>` : ""}
+            ">${displayTime}</div>`
+                : ""
+            }
           `;
         } else {
           el.innerHTML = `
@@ -511,7 +533,9 @@ export function SavedRoutesView({
                 <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="white"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>
               </div>
             </div>
-            ${displayTime ? `<div style="
+            ${
+              displayTime
+                ? `<div style="
               background-color: #036ffc;
               color: white;
               font-size: 9px;
@@ -521,7 +545,9 @@ export function SavedRoutesView({
               margin-top: 2px;
               white-space: nowrap;
               box-shadow: 0 1px 3px rgba(0,0,0,0.3);
-            ">${displayTime}</div>` : ""}
+            ">${displayTime}</div>`
+                : ""
+            }
           `;
         }
 
@@ -532,46 +558,79 @@ export function SavedRoutesView({
             return `
               <div class="p-2">
                 <div class="flex items-center gap-2 mb-2">
-                  <div class="w-8 h-8 rounded-full flex items-center justify-center" style="background-color: ${route.color.primary}">
+                  <div class="w-8 h-8 rounded-full flex items-center justify-center" style="background-color: ${
+                    getRouteColor(route).primary
+                  }">
                     <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="white"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>
                   </div>
                   <div>
                     <strong class="block">${passenger.name}</strong>
-                    <span class="text-xs font-bold" style="color: ${route.color.primary}">PICKUP - ${route.name}</span>
+                    <span class="text-xs font-bold" style="color: ${
+                      getRouteColor(route).primary
+                    }">PICKUP - ${route.name}</span>
                   </div>
                 </div>
-                <p class="text-xs text-gray-600 mb-1"><strong>Location:</strong> ${passenger.subPoint}</p>
-                <p class="text-xs text-gray-600 mb-1"><strong>Phone:</strong> ${passenger.phone}</p>
+                <p class="text-xs text-gray-600 mb-1"><strong>Location:</strong> ${
+                  passenger.subPoint
+                }</p>
+                <p class="text-xs text-gray-600 mb-1"><strong>Phone:</strong> ${
+                  passenger.phone
+                }</p>
                 <p class="text-xs text-gray-500 mb-2">${passenger.address}</p>
-                ${passenger.destinationSubPoint ? `<p class="text-xs text-orange-600 font-medium"><strong>Destination:</strong> ${passenger.destinationSubPoint}</p>` : ""}
+                ${
+                  passenger.destinationSubPoint
+                    ? `<p class="text-xs text-orange-600 font-medium"><strong>Destination:</strong> ${passenger.destinationSubPoint}</p>`
+                    : ""
+                }
               </div>
             `;
           }
 
           // Multiple passengers - create carousel
-          const carouselId = `pickup-carousel-${route.id}-${coordKey.replace(/[.,]/g, "-")}`;
-          const passengersHTML = passengersAtPickup.map((passenger, index) => `
-            <div class="carousel-slide" data-index="${index}" style="display: ${index === 0 ? "block" : "none"};">
+          const carouselId = `pickup-carousel-${route.id}-${coordKey.replace(
+            /[.,]/g,
+            "-"
+          )}`;
+          const passengersHTML = passengersAtPickup
+            .map(
+              (passenger, index) => `
+            <div class="carousel-slide" data-index="${index}" style="display: ${
+                index === 0 ? "block" : "none"
+              };">
               <div class="flex items-center gap-2 mb-2">
-                <div class="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0" style="background-color: ${route.color.primary}">
+                <div class="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0" style="background-color: ${
+                  getRouteColor(route).primary
+                }">
                   <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="white"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>
                 </div>
                 <div class="min-w-0 flex-1">
                   <strong class="block truncate">${passenger.name}</strong>
-                  <span class="text-xs font-bold" style="color: ${route.color.primary}">PICKUP - ${route.name}, ${passenger.time || ""}</span>
+                  <span class="text-xs font-bold" style="color: ${
+                    getRouteColor(route).primary
+                  }">PICKUP - ${route.name}, ${passenger.time || ""}</span>
                 </div>
               </div>
-              <p class="text-xs text-gray-600 mb-1"><strong>Location:</strong> ${passenger.subPoint}</p>
-              <p class="text-xs text-gray-600 mb-1"><strong>Phone:</strong> ${passenger.phone}</p>
+              <p class="text-xs text-gray-600 mb-1"><strong>Location:</strong> ${
+                passenger.subPoint
+              }</p>
+              <p class="text-xs text-gray-600 mb-1"><strong>Phone:</strong> ${
+                passenger.phone
+              }</p>
               <p class="text-xs text-gray-500 mb-2">${passenger.address}</p>
-              ${passenger.destinationSubPoint ? `<p class="text-xs text-orange-600 font-medium"><strong>Destination:</strong> ${passenger.destinationSubPoint}</p>` : ""}
+              ${
+                passenger.destinationSubPoint
+                  ? `<p class="text-xs text-orange-600 font-medium"><strong>Destination:</strong> ${passenger.destinationSubPoint}</p>`
+                  : ""
+              }
             </div>
-          `).join("");
+          `
+            )
+            .join("");
 
           return `
             <div class="p-2" style="min-width: 260px;">
               <div class="flex items-center justify-between mb-2 pb-2 border-b border-gray-200">
-                <span class="text-xs font-bold" style="color: ${route.color.primary}">${passengerCount} Passengers at this location</span>
+                <span class="text-xs font-bold" style="color: ${getRouteColor(route).primary}">${passengerCount} Passengers at this location</span>
               </div>
               <div id="${carouselId}" class="carousel-container">
                 ${passengersHTML}
@@ -603,18 +662,28 @@ export function SavedRoutesView({
         const setupPickupCarouselEvents = () => {
           if (passengerCount <= 1) return;
 
-          const carouselId = `pickup-carousel-${route.id}-${coordKey.replace(/[.,]/g, "-")}`;
+          const carouselId = `pickup-carousel-${route.id}-${coordKey.replace(
+            /[.,]/g,
+            "-"
+          )}`;
           const container = document.getElementById(carouselId);
           if (!container) return;
 
           const slides = container.querySelectorAll(".carousel-slide");
-          const indicator = document.querySelector(`.carousel-indicator[data-carousel="${carouselId}"]`);
-          const prevBtn = document.querySelector(`.carousel-prev[data-carousel="${carouselId}"]`);
-          const nextBtn = document.querySelector(`.carousel-next[data-carousel="${carouselId}"]`);
+          const indicator = document.querySelector(
+            `.carousel-indicator[data-carousel="${carouselId}"]`
+          );
+          const prevBtn = document.querySelector(
+            `.carousel-prev[data-carousel="${carouselId}"]`
+          );
+          const nextBtn = document.querySelector(
+            `.carousel-next[data-carousel="${carouselId}"]`
+          );
 
           const showSlide = (index: number) => {
             slides.forEach((slide, i) => {
-              (slide as HTMLElement).style.display = i === index ? "block" : "none";
+              (slide as HTMLElement).style.display =
+                i === index ? "block" : "none";
             });
             if (indicator) {
               indicator.textContent = `${index + 1} / ${passengerCount}`;
@@ -624,13 +693,19 @@ export function SavedRoutesView({
 
           prevBtn?.addEventListener("click", (e) => {
             e.stopPropagation();
-            const newIndex = pickupCurrentSlide === 0 ? passengerCount - 1 : pickupCurrentSlide - 1;
+            const newIndex =
+              pickupCurrentSlide === 0
+                ? passengerCount - 1
+                : pickupCurrentSlide - 1;
             showSlide(newIndex);
           });
 
           nextBtn?.addEventListener("click", (e) => {
             e.stopPropagation();
-            const newIndex = pickupCurrentSlide === passengerCount - 1 ? 0 : pickupCurrentSlide + 1;
+            const newIndex =
+              pickupCurrentSlide === passengerCount - 1
+                ? 0
+                : pickupCurrentSlide + 1;
             showSlide(newIndex);
           });
 
@@ -959,13 +1034,30 @@ export function SavedRoutesView({
     });
   };
 
-  // Filter routes by type
-  const goingRoutes = savedRoutes.filter(
-    (route) => route.routeType === "going"
-  );
-  const returnRoutes = savedRoutes.filter(
-    (route) => route.routeType === "return"
-  );
+  // Filter routes by type and sort by route name number (e.g. GR 1, GR 2, ...)
+  const extractRouteNumber = (name: string): number => {
+    const match = name.match(/(\d+)/);
+    return match ? parseInt(match[1], 10) : 0;
+  };
+
+  const goingRoutes = savedRoutes
+    .filter((route) => route.routeType === "going")
+    .sort((a, b) => extractRouteNumber(a.name) - extractRouteNumber(b.name));
+  const returnRoutes = savedRoutes
+    .filter((route) => route.routeType === "return")
+    .sort((a, b) => extractRouteNumber(a.name) - extractRouteNumber(b.name));
+
+  // Map each route ID to a unique color based on its index within its type
+  const routeColorMap = new Map<string, typeof ROUTE_COLORS[number]>();
+  goingRoutes.forEach((route, index) => {
+    routeColorMap.set(route.id, ROUTE_COLORS[index % ROUTE_COLORS.length]);
+  });
+  returnRoutes.forEach((route, index) => {
+    routeColorMap.set(route.id, ROUTE_COLORS[index % ROUTE_COLORS.length]);
+  });
+
+  const getRouteColor = (route: SavedRoute) =>
+    routeColorMap.get(route.id) || route.color;
 
   // Toggle route expansion
   const handleClearRoutesClick = () => {
@@ -1023,7 +1115,7 @@ export function SavedRoutesView({
         "Created At": formatDate(route.createdAt),
         "Distance (km)": route.routeInfo.distance.toFixed(2),
         "Duration (min)": Math.round(route.routeInfo.duration),
-        "Route Color": route.color.name,
+        "Route Color": getRouteColor(route).name,
         Role: "",
         Name: "",
         Phone: "",
@@ -1157,9 +1249,14 @@ export function SavedRoutesView({
               key={route.id}
               className={`transition-all ${
                 route.visible
-                  ? "border-2 border-blue-500 shadow-md"
+                  ? "border-2 shadow-md"
                   : "border-2 border-gray-200"
               }`}
+              style={
+                route.visible
+                  ? { borderColor: getRouteColor(route).primary }
+                  : undefined
+              }
             >
               <CardHeader className="pt-2 pb-3">
                 <div className="flex items-center gap-1 ">
@@ -1170,7 +1267,7 @@ export function SavedRoutesView({
                     title={route.visible ? "Hide route" : "Show route"}
                   >
                     {route.visible ? (
-                      <Eye className="w-4 h-4 text-blue-600" />
+                      <Eye className="w-4 h-4" style={{ color: getRouteColor(route).primary }} />
                     ) : (
                       <EyeOff className="w-4 h-4 text-gray-400" />
                     )}
@@ -1183,6 +1280,16 @@ export function SavedRoutesView({
                   >
                     <Trash2 className="w-4 h-4 text-red-500" />
                   </Button>
+                  {onEditRoute && (
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => onEditRoute(route)}
+                      title="Edit route"
+                    >
+                      <Pencil className="w-4 h-4 text-blue-500" />
+                    </Button>
+                  )}
                 </div>
                 <div className="flex items-start justify-between">
                   <button
@@ -1191,20 +1298,22 @@ export function SavedRoutesView({
                   >
                     <div
                       style={{
-                        width: "4px",
+                        width: "6px",
                         height: "40px",
-                        backgroundColor: route.color.primary,
-                        borderRadius: "2px",
+                        backgroundColor: getRouteColor(route).primary,
+                        borderRadius: "3px",
                       }}
                     />
                     <div className="flex-1">
                       <CardTitle className="text-base text-[13px]">
-                        {route.name} - <span className="text-red-600">{driverData?.name}</span> - {driverData?.id} -{" "}
-                        {driverData?.subPoint} - {driverData?.time}
+                        <span style={{ color: getRouteColor(route).primary, fontWeight: 700 }}>{route.name}</span> -{" "}
+                        <span className="text-red-600">{driverData?.name}</span>{" "}
+                        - {driverData?.id} - {driverData?.subPoint} -{" "}
+                        {driverData?.time}
                       </CardTitle>
                       <div className="flex items-center gap-2 mt-1">
                         <p className="text-xs text-gray-500">
-                          {formatDate(route.createdAt)}
+                          {route.date}, {route.shift}
                         </p>
                         <span className="text-xs text-gray-400">•</span>
                         <p className="text-xs text-blue-600 font-medium">
@@ -1232,7 +1341,10 @@ export function SavedRoutesView({
                         timeCounts[t] = (timeCounts[t] || 0) + 1;
                       });
                       return Object.entries(timeCounts).map(([time, count]) => (
-                        <p key={time} className="text-xs text-gray-500 flex items-center justify-end gap-1">
+                        <p
+                          key={time}
+                          className="text-xs text-gray-500 flex items-center justify-end gap-1"
+                        >
                           {count} <User size={12} /> {time}
                         </p>
                       ));
@@ -1351,14 +1463,15 @@ export function SavedRoutesView({
                     <div className="flex items-center gap-2">
                       <div
                         style={{
-                          width: "24px",
-                          height: "4px",
-                          backgroundColor: route.color.primary,
-                          borderRadius: "2px",
+                          width: "12px",
+                          height: "12px",
+                          backgroundColor: getRouteColor(route).primary,
+                          borderRadius: "50%",
+                          border: "2px solid rgba(0,0,0,0.1)",
                         }}
                       />
-                      <span className="text-xs text-gray-600">
-                        Route Color: {route.color.name}
+                      <span className="text-xs font-medium" style={{ color: getRouteColor(route).primary }}>
+                        {getRouteColor(route).name}
                       </span>
                     </div>
                   </div>
@@ -1375,8 +1488,8 @@ export function SavedRoutesView({
       <div className="w-96 bg-white border-r overflow-y-auto">
         <div className="p-4 space-y-4">
           <div>
-            <h2 className="text-xl font-bold">
-              Saved Routes{" "}
+            <div className="flex">
+              <h2 className="text-xl font-bold">Saved Routes </h2>
               <Button
                 onClick={handleClearRoutesClick}
                 size="sm"
@@ -1391,7 +1504,22 @@ export function SavedRoutesView({
                 <Trash2 className="w-4 h-4" />
                 Clear
               </Button>
-            </h2>
+              <Button
+                onClick={() => exportToExcel(activeTab)}
+                size="sm"
+                variant="outline"
+                className="gap-2"
+                disabled={
+                  activeTab === "going"
+                    ? goingRoutes.length === 0
+                    : returnRoutes.length === 0
+                }
+              >
+                <FileDown className="w-4 h-4" />
+                Export
+              </Button>
+            </div>
+
             <p className="text-sm text-gray-600 mt-1">
               {savedRoutes.length}{" "}
               {savedRoutes.length === 1 ? "route" : "routes"} saved
@@ -1412,22 +1540,6 @@ export function SavedRoutesView({
                   Return Routes ({returnRoutes.length})
                 </TabsTrigger>
               </TabsList>
-              <div className="flex flex-col gap-1">
-                <Button
-                  onClick={() => exportToExcel(activeTab)}
-                  size="sm"
-                  variant="outline"
-                  className="gap-2"
-                  disabled={
-                    activeTab === "going"
-                      ? goingRoutes.length === 0
-                      : returnRoutes.length === 0
-                  }
-                >
-                  <FileDown className="w-4 h-4" />
-                  Export
-                </Button>
-              </div>
             </div>
 
             <TabsContent value="going" className="mt-4">
@@ -1483,7 +1595,6 @@ export function SavedRoutesView({
     </div>
   );
 }
-
 
 interface ConfirmationDialogProps {
   open: boolean;

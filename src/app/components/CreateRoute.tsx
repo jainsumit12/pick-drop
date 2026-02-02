@@ -40,8 +40,10 @@ import {
   setGoingDriverTimeFilter,
   setGoingDriverSearch,
   setGoingPassengerSearch,
+  setGoingEditingRouteId,
 } from "../../store/slices/filterSlice";
 import { clearRouteData, saveRouteData } from "../../store/slices/dataSlice";
+import { deleteRoute } from "../../store/slices/routesSlice";
 import { SHIFT_TYPES, normalizeShift } from "../../constants/shifts";
 
 interface Location {
@@ -192,6 +194,7 @@ export function CreateRoute({ savedRoutes, onSaveRoute }: CreateRouteProps) {
     driverTimeFilter,
     driverSearch,
     passengerSearch,
+    editingRouteId,
   } = useAppSelector((state) => state.filters.going);
 
   const selectedPassengers = Array.isArray(selectedPassengersRaw)
@@ -245,7 +248,7 @@ export function CreateRoute({ savedRoutes, onSaveRoute }: CreateRouteProps) {
   const selectedPassengersRef = useRef<string[]>(selectedPassengers);
   const [routeInfo, setRouteInfo] = useState<RouteInfo | null>(null);
   const [isCalculating, setIsCalculating] = useState(false);
-  const [routeColorIndex, setRouteColorIndex] = useState(0);
+  const [routeColorIndex, setRouteColorIndex] = useState(() => goingRoutes.length % 10);
   const [distanceSaved, setDistanceSaved] = useState<number>(0); // Track distance saved by optimization
   const [driversData, setDriversData] = useState<ShiftDriver[]>([]);
   const [driversLoading, setDriversLoading] = useState(false);
@@ -302,6 +305,11 @@ export function CreateRoute({ savedRoutes, onSaveRoute }: CreateRouteProps) {
     { primary: "#ec4899", name: "Pink" },
     { primary: "#f59e0b", name: "Orange" },
     { primary: "#10b981", name: "Green" },
+    { primary: "#ef4444", name: "Red" },
+    { primary: "#06b6d4", name: "Cyan" },
+    { primary: "#f97316", name: "Dark Orange" },
+    { primary: "#14b8a6", name: "Teal" },
+    { primary: "#a855f7", name: "Violet" },
   ];
   const routeType: "going" = "going";
   const routeTypeLabel = routeType.charAt(0).toUpperCase() + routeType.slice(1);
@@ -363,13 +371,13 @@ export function CreateRoute({ savedRoutes, onSaveRoute }: CreateRouteProps) {
   // );
   const usedPassengerIds = new Set(
     savedRoutes
-      .filter((route) => route.routeType === "going")
+      .filter((route) => route.routeType === "going" && route.id !== editingRouteId)
       .flatMap((route) => route.passengerIds.map((id) => String(id)))
   );
 
   const usedDriverIds = new Set(
     savedRoutes
-      .filter((route) => route.routeType === "going")
+      .filter((route) => route.routeType === "going" && route.id !== editingRouteId)
       .map((route) => String(route.driverId))
   );
 
@@ -388,8 +396,11 @@ export function CreateRoute({ savedRoutes, onSaveRoute }: CreateRouteProps) {
     ? normalizeAddress(currentDriver.address)
     : null;
 
+  const selectedPassengerSet = new Set(selectedPassengers.map((s) => String(s)));
   const baseAvailablePassengers = passengers.filter(
-    (passenger) => !usedPassengerIds.has(String(passenger.id))
+    (passenger) =>
+      !usedPassengerIds.has(String(passenger.id)) ||
+      selectedPassengerSet.has(String(passenger.id))
   );
   const availablePassengers = normalizedDriverAddress
     ? baseAvailablePassengers.filter(
@@ -598,7 +609,7 @@ export function CreateRoute({ savedRoutes, onSaveRoute }: CreateRouteProps) {
       if (!passengerId) return;
 
       const isSelected = button.getAttribute("data-selected") === "true";
-      const currentPassengers = selectedPassengersRef.current;
+      const currentPassengers = selectedPassengersRef.current.map((s) => String(s));
       const newPassengers = currentPassengers.includes(passengerId)
         ? currentPassengers.filter((id) => id !== passengerId)
         : [...currentPassengers, passengerId];
@@ -1037,10 +1048,11 @@ export function CreateRoute({ savedRoutes, onSaveRoute }: CreateRouteProps) {
         el.addEventListener("click", () => {
           pickupPopup.remove(); // keep popup hover-only
           // Use ref to get latest selectedPassengers and avoid stale closure
-          const currentPassengers = selectedPassengersRef.current;
-          const newPassengers = currentPassengers.includes(passenger.id)
-            ? currentPassengers.filter((id) => id !== passenger.id)
-            : [...currentPassengers, passenger.id];
+          const currentPassengers = selectedPassengersRef.current.map((s) => String(s));
+          const pid = String(passenger.id);
+          const newPassengers = currentPassengers.includes(pid)
+            ? currentPassengers.filter((id) => id !== pid)
+            : [...currentPassengers, pid];
           setSelectedPassengers(newPassengers);
         });
 
@@ -1878,6 +1890,7 @@ export function CreateRoute({ savedRoutes, onSaveRoute }: CreateRouteProps) {
     setSelectedPassengers([]);
     setRouteInfo(null);
     setShowBottomPanel(false);
+    dispatch(setGoingEditingRouteId(null));
   };
 
   const handleClearDataClick = () => {
@@ -2029,13 +2042,17 @@ export function CreateRoute({ savedRoutes, onSaveRoute }: CreateRouteProps) {
       : undefined;
     const passengerSnapshots = currentPassengers.map(toParticipantSnapshot);
 
+    const editingRoute = editingRouteId
+      ? savedRoutes.find((r) => r.id === editingRouteId)
+      : undefined;
+
     const newRoute: SavedRoute = {
       id: `route-${Date.now()}`,
-      name: `GR ${goingRoutes?.length + 1}`,
+      name: editingRoute ? editingRoute.name : `GR ${goingRoutes?.length + 1}`,
       driverId: selectedDriver,
       passengerIds: selectedPassengers.map((id) => String(id)),
       routeInfo: routeInfo,
-      color: routeColors[routeColorIndex],
+      color: editingRoute ? editingRoute.color : routeColors[routeColorIndex],
       visible: true,
       createdAt: new Date().toISOString(),
       routeType: "going",
@@ -2045,6 +2062,18 @@ export function CreateRoute({ savedRoutes, onSaveRoute }: CreateRouteProps) {
       shift: selectedShift,
     };
 
+    if (editingRouteId) {
+      dispatch(deleteRoute(editingRouteId));
+    }
+    dispatch(
+      saveRouteData({
+        routeType: "going",
+        shift: normalizedShift,
+        date: selectedDate,
+        drivers: driversData,
+        passengers: passengersData,
+      })
+    );
     onSaveRoute(newRoute);
     clearSelections();
   };

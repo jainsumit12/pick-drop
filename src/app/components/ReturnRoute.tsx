@@ -41,8 +41,10 @@ import {
   setReturnDriverTimeFilter,
   setReturnDriverSearch,
   setReturnPassengerSearch,
+  setReturnEditingRouteId,
 } from "../../store/slices/filterSlice";
 import { saveRouteData, clearRouteData } from "../../store/slices/dataSlice";
+import { deleteRoute } from "../../store/slices/routesSlice";
 import { SHIFT_TYPES, normalizeShift } from "../../constants/shifts";
 
 interface Location {
@@ -227,6 +229,7 @@ export function ReturnRoute({ onSaveRoute }: ReturnRouteProps) {
     driverTimeFilter,
     driverSearch,
     passengerSearch,
+    editingRouteId,
   } = useAppSelector((state) => state.filters.return);
   const storedRoutes = useAppSelector((state) => state.routes.savedRoutes);
 
@@ -274,7 +277,7 @@ export function ReturnRoute({ onSaveRoute }: ReturnRouteProps) {
   selectedPassengersRef.current = selectedPassengers;
   const [routeInfo, setRouteInfo] = useState<RouteInfo | null>(null);
   const [isCalculating, setIsCalculating] = useState(false);
-  const [routeColorIndex, setRouteColorIndex] = useState(0);
+  const [routeColorIndex, setRouteColorIndex] = useState(() => returnRoutes.length % 10);
   const [driversData, setDriversData] = useState<ShiftDriver[]>([]);
   const [driversLoading, setDriversLoading] = useState(false);
   const [driversError, setDriversError] = useState<string | null>(null);
@@ -328,6 +331,11 @@ export function ReturnRoute({ onSaveRoute }: ReturnRouteProps) {
     { primary: "#ec4899", name: "Pink" },
     { primary: "#f59e0b", name: "Orange" },
     { primary: "#10b981", name: "Green" },
+    { primary: "#ef4444", name: "Red" },
+    { primary: "#06b6d4", name: "Cyan" },
+    { primary: "#f97316", name: "Dark Orange" },
+    { primary: "#14b8a6", name: "Teal" },
+    { primary: "#a855f7", name: "Violet" },
   ];
 
   const routeType: "return" = "return";
@@ -382,12 +390,12 @@ export function ReturnRoute({ onSaveRoute }: ReturnRouteProps) {
   // Filter out drivers and passengers that are already used in saved RETURN routes only
   const usedDriverIds = new Set(
     storedRoutes
-      .filter((route) => route.routeType === "return")
+      .filter((route) => route.routeType === "return" && route.id !== editingRouteId)
       .map((route) => String(route.driverId))
   );
   const usedPassengerIds = new Set(
     storedRoutes
-      .filter((route) => route.routeType === "return")
+      .filter((route) => route.routeType === "return" && route.id !== editingRouteId)
       .flatMap((route) => route.passengerIds.map((id) => String(id)))
   );
 
@@ -399,8 +407,11 @@ export function ReturnRoute({ onSaveRoute }: ReturnRouteProps) {
     (driver) =>
       !usedDriverIds.has(String(driver.id)) || driver.id === selectedDriver
   );
+  const selectedPassengerSet = new Set(selectedPassengers.map((s) => String(s)));
   const availablePassengers = passengers.filter(
-    (passenger) => !usedPassengerIds.has(String(passenger.id))
+    (passenger) =>
+      !usedPassengerIds.has(String(passenger.id)) ||
+      selectedPassengerSet.has(String(passenger.id))
   );
 
   const displayDriverCount = availableDrivers.length;
@@ -1867,6 +1878,7 @@ export function ReturnRoute({ onSaveRoute }: ReturnRouteProps) {
     setSelectedPassengers([]);
     setRouteInfo(null);
     setShowBottomPanel(false);
+    dispatch(setReturnEditingRouteId(null));
   };
 
   const handleClearDataClick = () => {
@@ -1972,13 +1984,17 @@ export function ReturnRoute({ onSaveRoute }: ReturnRouteProps) {
       : undefined;
     const passengerSnapshots = currentPassengers.map(toParticipantSnapshot);
 
+    const editingRoute = editingRouteId
+      ? storedRoutes.find((r) => r.id === editingRouteId)
+      : undefined;
+
     const newRoute: SavedRoute = {
       id: `route-${Date.now()}`,
-      name: `RR ${returnRoutes.length + 1}`,
+      name: editingRoute ? editingRoute.name : `RR ${returnRoutes.length + 1}`,
       driverId: selectedDriver,
       passengerIds: selectedPassengers,
       routeInfo: routeInfo,
-      color: routeColors[routeColorIndex],
+      color: editingRoute ? editingRoute.color : routeColors[routeColorIndex],
       visible: true,
       createdAt: new Date().toISOString(),
       routeType: "return",
@@ -1988,6 +2004,18 @@ export function ReturnRoute({ onSaveRoute }: ReturnRouteProps) {
       shift: selectedShift,
     };
 
+    if (editingRouteId) {
+      dispatch(deleteRoute(editingRouteId));
+    }
+    dispatch(
+      saveRouteData({
+        routeType: "return",
+        shift: normalizedShift,
+        date: selectedDate,
+        drivers: driversData,
+        passengers: passengersData,
+      })
+    );
     onSaveRoute(newRoute);
     clearSelections();
   };

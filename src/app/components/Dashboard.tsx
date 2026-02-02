@@ -7,6 +7,10 @@ import { SavedRoutesView } from './SavedRoutesView';
 import { MapboxSettings } from './MapboxSettings';
 import { useAppDispatch, useAppSelector } from '../../store/hooks';
 import { addRoute, deleteRoute, toggleRouteVisibility, clearRoutesByType } from '../../store/slices/routesSlice';
+import {
+  setGoingDate, setGoingShift, setGoingDriver, setGoingPassengers, setGoingEditingRouteId,
+  setReturnDate, setReturnShift, setReturnDriver, setReturnPassengers, setReturnEditingRouteId,
+} from '../../store/slices/filterSlice';
 import { SavedRoute } from '../../types/route';
 
 interface DashboardProps {
@@ -51,6 +55,23 @@ export function Dashboard({ user, onLogout }: DashboardProps) {
 
   const handleClearRoutes = (routeType: 'going' | 'return') => {
     dispatch(clearRoutesByType(routeType));
+  };
+
+  const handleEditRoute = (route: SavedRoute) => {
+    if (route.routeType === 'going') {
+      dispatch(setGoingDate(route.date));
+      dispatch(setGoingShift(route.shift));
+      dispatch(setGoingDriver(route.driverId));
+      dispatch(setGoingPassengers(route.passengerIds));
+      dispatch(setGoingEditingRouteId(route.id));
+    } else {
+      dispatch(setReturnDate(route.date));
+      dispatch(setReturnShift(route.shift));
+      dispatch(setReturnDriver(route.driverId));
+      dispatch(setReturnPassengers(route.passengerIds));
+      dispatch(setReturnEditingRouteId(route.id));
+    }
+    navigate(`/dashboard/${route.routeType}`);
   };
 
   return (
@@ -141,6 +162,7 @@ export function Dashboard({ user, onLogout }: DashboardProps) {
                 onDeleteRoute={handleDeleteRoute}
                 onToggleVisibility={handleToggleVisibility}
                 onClearRoutes={handleClearRoutes}
+                onEditRoute={handleEditRoute}
               />
             }
           />
