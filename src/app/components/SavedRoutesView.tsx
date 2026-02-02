@@ -407,10 +407,11 @@ export function SavedRoutesView({
         // Get first name only for display
         const displayName = driverData.name.split(" ")[0];
 
+        const routeColor = getRouteColor(route).primary;
         el.innerHTML = `
-         
+
           <div style="
-            background-color: #f20505;
+            background-color: ${routeColor};
             color: white;
             font-size: 9px;
             font-weight: 600;
@@ -481,6 +482,7 @@ export function SavedRoutesView({
         el.style.cursor = "pointer";
         el.style.opacity = "0.9";
 
+        const pickupColor = getRouteColor(route).primary;
         if (passengerCount > 1) {
           el.innerHTML = `
             <div style="display:flex; flex-direction:column; align-items:center;">
@@ -488,7 +490,7 @@ export function SavedRoutesView({
                 width: 32px;
                 height: 32px;
                 border-radius: 50%;
-                background-color: #3b82f5;
+                background-color: ${pickupColor};
                 border: 3px solid white;
                 box-shadow: 0 4px 8px rgba(0,0,0,0.3);
                 display: flex;
@@ -503,7 +505,7 @@ export function SavedRoutesView({
             ${
               displayTime
                 ? `<div style="
-              background-color: #036ffc;
+              background-color: ${pickupColor};
               color: white;
               font-size: 9px;
               font-weight: 600;
@@ -523,7 +525,7 @@ export function SavedRoutesView({
                 width: 30px;
                 height: 30px;
                 border-radius: 50%;
-                background-color: #3b82f5;
+                background-color: ${pickupColor};
                 border: 3px solid white;
                 box-shadow: 0 4px 8px rgba(0,0,0,0.3);
                 display: flex;
@@ -536,7 +538,7 @@ export function SavedRoutesView({
             ${
               displayTime
                 ? `<div style="
-              background-color: #036ffc;
+              background-color: ${pickupColor};
               color: white;
               font-size: 9px;
               font-weight: 600;
@@ -777,7 +779,7 @@ export function SavedRoutesView({
         destEl.style.width = passengerCount > 1 ? "32px" : "26px";
         destEl.style.height = passengerCount > 1 ? "32px" : "26px";
         destEl.style.borderRadius = "50%";
-        destEl.style.backgroundColor = "#f59e0b";
+        destEl.style.backgroundColor = getRouteColor(route).primary;
         destEl.style.border = "3px solid white";
         destEl.style.boxShadow = "0 4px 8px rgba(0,0,0,0.3)";
         destEl.style.display = "flex";
