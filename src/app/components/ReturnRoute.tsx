@@ -25,6 +25,8 @@ import {
   Loader2,
   Trash,
   UserPlus,
+  List,
+  Edit3,
 } from "lucide-react";
 import { driversService, passengersService } from "../../api/services";
 import { RouteParticipant, SavedRoute, RouteInfo } from "../../types/route";
@@ -124,6 +126,24 @@ const toParticipantSnapshot = (location: Location): RouteParticipant => ({
   destinationCoordinates: location.destinationCoordinates,
   destination: location.destination,
   destinationSubPoint: location.destinationSubPoint,
+});
+
+const snapshotToLocation = (
+  participant: RouteParticipant,
+  type: "driver" | "passenger"
+): Location => ({
+  id: participant.id,
+  name: participant.name,
+  coordinates: participant.coordinates,
+  type,
+  phone: participant.phone,
+  address: participant.address,
+  subPoint: participant.subPoint,
+  shiftTime: participant.time || "",
+  time: participant.time,
+  destinationCoordinates: participant.destinationCoordinates,
+  destination: participant.destination,
+  destinationSubPoint: participant.destinationSubPoint,
 });
 
 // Generate unique color for each passenger using HSL
@@ -275,6 +295,7 @@ export function ReturnRoute({ onSaveRoute }: ReturnRouteProps) {
   const selectedPassengersRef = useRef<string[]>(selectedPassengers);
   // Keep ref updated with latest selectedPassengers
   selectedPassengersRef.current = selectedPassengers;
+  const queuedLayerIdsRef = useRef<Set<string>>(new Set());
   const [routeInfo, setRouteInfo] = useState<RouteInfo | null>(null);
   const [isCalculating, setIsCalculating] = useState(false);
   const [routeColorIndex, setRouteColorIndex] = useState(() => returnRoutes.length % 10);
@@ -284,6 +305,12 @@ export function ReturnRoute({ onSaveRoute }: ReturnRouteProps) {
   const [passengersData, setPassengersData] = useState<ShiftPassenger[]>([]);
   const [passengersLoading, setPassengersLoading] = useState(false);
   const [passengersError, setPassengersError] = useState<string | null>(null);
+  const [pendingRoutes, setPendingRoutes] = useState<SavedRoute[]>([]);
+  const [editingQueuedRoute, setEditingQueuedRoute] = useState<{
+    id: string;
+    name: string;
+    color: { primary: string; name: string };
+  } | null>(null);
 
   // Dropdown states
   const [showDriverDropdown, setShowDriverDropdown] = useState(false);
@@ -398,6 +425,38 @@ export function ReturnRoute({ onSaveRoute }: ReturnRouteProps) {
       .filter((route) => route.routeType === "return" && route.id !== editingRouteId)
       .flatMap((route) => route.passengerIds.map((id) => String(id)))
   );
+
+  const queuedDriverIds = new Set(pendingRoutes.map((route) => String(route.driverId)));
+  const queuedPassengerIds = new Set(
+    pendingRoutes.flatMap((route) => route.passengerIds.map((id) => String(id)))
+  );
+
+  queuedDriverIds.forEach((id) => {
+    if (id) usedDriverIds.add(id);
+  });
+  queuedPassengerIds.forEach((id) => {
+    if (id) usedPassengerIds.add(id);
+  });
+
+  const queuedDriverColorMap = new Map<string, string>();
+  const queuedPassengerColorMap = new Map<string, string>();
+  pendingRoutes.forEach((route) => {
+    if (route.driverId) {
+      queuedDriverColorMap.set(String(route.driverId), route.color.primary);
+    }
+    route.passengerIds.forEach((passengerId) => {
+      queuedPassengerColorMap.set(String(passengerId), route.color.primary);
+    });
+  });
+
+  const queuedDriverLocations = pendingRoutes
+    .map((route) => route.driverSnapshot)
+    .filter((driver): driver is RouteParticipant => Boolean(driver))
+    .map((driver) => snapshotToLocation(driver, "driver"));
+
+  const queuedPassengerLocations = pendingRoutes
+    .flatMap((route) => route.passengerSnapshots ?? [])
+    .map((passenger) => snapshotToLocation(passenger, "passenger"));
 
   const occupiedDrivers = drivers.filter(
     (driver) =>
@@ -515,6 +574,16 @@ export function ReturnRoute({ onSaveRoute }: ReturnRouteProps) {
     );
   });
 
+    const queuedDestinationPassengers = queuedPassengerLocations.filter(
+      (passenger) =>
+        passenger.destinationCoordinates &&
+        !filteredPassengers.some(
+          (fp) =>
+            String(fp.id) === String(passenger.id) &&
+            fp.destinationCoordinates
+        )
+    );
+
   // Get selected driver and passengers
   const currentDriver = availableDrivers.find((d) => d.id === selectedDriver);
   const currentPassengers = availablePassengers.filter((p) =>
@@ -570,6 +639,9 @@ export function ReturnRoute({ onSaveRoute }: ReturnRouteProps) {
         ".passenger-toggle[data-passenger-id]"
       ) as HTMLElement;
       if (toggleBtn) {
+        if (toggleBtn.getAttribute("data-queued") === "true") {
+          return;
+        }
         event.stopPropagation();
         event.preventDefault();
         const passengerId = toggleBtn.getAttribute("data-passenger-id");
@@ -593,16 +665,20 @@ export function ReturnRoute({ onSaveRoute }: ReturnRouteProps) {
         const passengerIdsStr = selectAllBtn.getAttribute("data-passenger-ids");
         if (!passengerIdsStr) return;
         const passengerIds = passengerIdsStr.split(",");
+        const filteredIds = passengerIds.filter(
+          (id) => !queuedPassengerIds.has(id)
+        );
+        if (filteredIds.length === 0) return;
         const current = selectedPassengersRef.current.map((id) => String(id));
-        const allSelected = passengerIds.every((id) => current.includes(id));
+        const allSelected = filteredIds.every((id) => current.includes(id));
 
         if (allSelected) {
           const newPassengers = current.filter(
-            (id) => !passengerIds.includes(id)
+            (id) => !filteredIds.includes(id)
           );
           dispatch(setReturnPassengers(newPassengers));
         } else {
-          const newPassengers = [...new Set([...current, ...passengerIds])];
+          const newPassengers = [...new Set([...current, ...filteredIds])];
           dispatch(setReturnPassengers(newPassengers));
         }
         return;
@@ -619,16 +695,20 @@ export function ReturnRoute({ onSaveRoute }: ReturnRouteProps) {
           selectAllHomeBtn.getAttribute("data-passenger-ids");
         if (!passengerIdsStr) return;
         const passengerIds = passengerIdsStr.split(",");
+        const filteredIds = passengerIds.filter(
+          (id) => !queuedPassengerIds.has(id)
+        );
+        if (filteredIds.length === 0) return;
         const current = selectedPassengersRef.current.map((id) => String(id));
-        const allSelected = passengerIds.every((id) => current.includes(id));
+        const allSelected = filteredIds.every((id) => current.includes(id));
 
         if (allSelected) {
           const newPassengers = current.filter(
-            (id) => !passengerIds.includes(id)
+            (id) => !filteredIds.includes(id)
           );
           dispatch(setReturnPassengers(newPassengers));
         } else {
-          const newPassengers = [...new Set([...current, ...passengerIds])];
+          const newPassengers = [...new Set([...current, ...filteredIds])];
           dispatch(setReturnPassengers(newPassengers));
         }
         return;
@@ -638,7 +718,7 @@ export function ReturnRoute({ onSaveRoute }: ReturnRouteProps) {
     document.addEventListener("click", handlePassengerButtonClick);
     return () =>
       document.removeEventListener("click", handlePassengerButtonClick);
-  }, [dispatch]);
+  }, [dispatch, pendingRoutes]);
 
   useEffect(() => {
     if (!map.current) return;
@@ -664,6 +744,7 @@ export function ReturnRoute({ onSaveRoute }: ReturnRouteProps) {
     passengerSearch,
     driverSearch,
     checkedDrivers,
+    pendingRoutes,
   ]);
 
   const updateMarkersAndRoute = () => {
@@ -673,10 +754,17 @@ export function ReturnRoute({ onSaveRoute }: ReturnRouteProps) {
     markersRef.current = [];
 
     // Add driver markers based on filter and checkbox selection
-    const driversToShow =
+    const baseDrivers =
       checkedDrivers.length > 0
         ? drivers.filter((d) => checkedDrivers.includes(d.id))
         : filteredDrivers;
+    const driverIdSet = new Set(baseDrivers.map((driver) => String(driver.id)));
+    const driversToShow = [
+      ...baseDrivers,
+      ...queuedDriverLocations.filter(
+        (driver) => !driverIdSet.has(String(driver.id))
+      ),
+    ];
 
     const driverGroups = new Map<string, Location[]>();
     driversToShow.forEach((driver) => {
@@ -709,9 +797,11 @@ export function ReturnRoute({ onSaveRoute }: ReturnRouteProps) {
 
         el.style.borderRadius = "6px";
         el.style.backgroundColor = isSelected ? "rgba(37,99,235,0.08)" : "";
+        const queuedDriverColor = queuedDriverColorMap.get(String(driver.id));
+        const driverMarkerColor = queuedDriverColor || (isSelected ? "#a10505" : "#f20505");
         el.innerHTML = `
           <div style="
-            background-color: ${isSelected ? "#a10505" : "#f20505"};
+            background-color: ${driverMarkerColor};
             color: white;
             font-size: 9px;
             font-weight: 600;
@@ -988,10 +1078,19 @@ export function ReturnRoute({ onSaveRoute }: ReturnRouteProps) {
       markersRef.current.push(groupMarker);
     });
 
-    // Add filtered passenger markers with unique colors (work and home locations)
-    // Add filtered passenger markers with unique colors (work and home locations)
+    // Add filtered + queued passenger markers with unique colors (work and home locations)
+    const passengerIdSet = new Set(
+      filteredPassengers.map((p) => String(p.id))
+    );
+    const passengersToShow = [
+      ...filteredPassengers,
+      ...queuedPassengerLocations.filter(
+        (passenger) => !passengerIdSet.has(String(passenger.id))
+      ),
+    ];
+
     const workGroups = new Map<string, Location[]>();
-    filteredPassengers.forEach((passenger) => {
+    passengersToShow.forEach((passenger) => {
       const coordKey = `${passenger.coordinates[0]},${passenger.coordinates[1]}`;
       if (!workGroups.has(coordKey)) {
         workGroups.set(coordKey, []);
@@ -1009,6 +1108,7 @@ export function ReturnRoute({ onSaveRoute }: ReturnRouteProps) {
         const isSelected = selectedPassengers
           .map((s) => String(s))
           .includes(String(passenger.id));
+        const isQueued = queuedPassengerIds.has(String(passenger.id));
 
         // Format time for display (show only HH:MM)
         const displayTime = passenger.time ? passenger.time.slice(0, 5) : "";
@@ -1018,23 +1118,26 @@ export function ReturnRoute({ onSaveRoute }: ReturnRouteProps) {
         workEl.style.display = "flex";
         workEl.style.flexDirection = "column";
         workEl.style.alignItems = "center";
-        workEl.style.cursor = "pointer";
+        workEl.style.cursor = isQueued ? "not-allowed" : "pointer";
         workEl.style.transition = "all 0.2s";
         const isDummy = String(passenger.id).startsWith("DUMMY-");
+        const queuedPassengerColor = queuedPassengerColorMap.get(String(passenger.id));
+        const workTimeBg = queuedPassengerColor || "#036ffc";
+        const workBgColor =
+          queuedPassengerColor ||
+          (isDummy
+            ? isSelected
+              ? "#000"
+              : "#000"
+            : isSelected
+            ? "#3b82f5"
+            : "#629dfc");
         workEl.innerHTML = `
         <div style="
           width: ${isSelected ? "32px" : "24px"};
           height: ${isSelected ? "32px" : "24px"};
           border-radius: 50%;
-          background-color: ${
-            isDummy
-              ? isSelected
-                ? "#000"
-                : "#000"
-              : isSelected
-              ? "#3b82f5"
-              : "#629dfc"
-          };
+          background-color: ${workBgColor};
           border: ${isSelected ? "3px solid white" : "2px solid white"};
           box-shadow: ${
             isSelected
@@ -1052,10 +1155,10 @@ export function ReturnRoute({ onSaveRoute }: ReturnRouteProps) {
           isSelected ? "16" : "12"
         }" viewBox="0 0 24 24" fill="white"><path d="M12 7V3H2v18h20V7H12zM6 19H4v-2h2v2zm0-4H4v-2h2v2zm0-4H4V9h2v2zm0-4H4V5h2v2zm4 12H8v-2h2v2zm0-4H8v-2h2v2zm0-4H8V9h2v2zm0-4H8V5h2v2zm10 12h-8v-2h2v-2h-2v-2h2v-2h-2V9h8v10zm-2-8h-2v2h2v-2zm0 4h-2v2h2v-2z"/></svg>
         </div>
-        ${
+          ${
           displayTime
             ? `<div style="
-          background-color: #036ffc;
+          background-color: ${workTimeBg};
           color: white;
           font-size: 9px;
           font-weight: 600;
@@ -1068,10 +1171,12 @@ export function ReturnRoute({ onSaveRoute }: ReturnRouteProps) {
             : ""
         }`;
 
-        workEl.addEventListener("click", () => {
-          workPopup.remove();
-          togglePassenger(passenger.id);
-        });
+        if (!isQueued) {
+          workEl.addEventListener("click", () => {
+            workPopup.remove();
+            togglePassenger(passenger.id);
+          });
+        }
 
         const workPopup = new mapboxgl.Popup({
           closeButton: false,
@@ -1109,9 +1214,11 @@ export function ReturnRoute({ onSaveRoute }: ReturnRouteProps) {
                 : ""
             }
             ${
-              !isSelected
-                ? '<p class="text-xs text-green-600 font-medium cursor-pointer mt-1">Click marker to select</p>'
-                : ""
+              isQueued
+                ? '<p class="text-xs text-gray-500 font-medium mt-1">Already queued</p>'
+                : !isSelected
+                  ? '<p class="text-xs text-green-600 font-medium cursor-pointer mt-1">Click marker to select</p>'
+                  : ""
             }
           </div>
         `);
@@ -1159,14 +1266,20 @@ export function ReturnRoute({ onSaveRoute }: ReturnRouteProps) {
           "-"
         )}`;
         const allPassengerIds = passengersAtWork.map((p) => String(p.id));
-        const allSelected = allPassengerIds.every((id) =>
-          selectedPassengers.map((s) => String(s)).includes(id)
+        const selectablePassengerIds = allPassengerIds.filter(
+          (id) => !queuedPassengerIds.has(id)
         );
+        const allSelected =
+          selectablePassengerIds.length > 0 &&
+          selectablePassengerIds.every((id) =>
+            selectedPassengers.map((s) => String(s)).includes(id)
+          );
         const passengersHTML = passengersAtWork
           .map((passenger, index) => {
             const isSelected = selectedPassengers
               .map((s) => String(s))
               .includes(String(passenger.id));
+            const isQueued = queuedPassengerIds.has(String(passenger.id));
             return `
           <div class="carousel-slide" data-index="${index}" style="display: ${
               index === 0 ? "block" : "none"
@@ -1192,15 +1305,19 @@ export function ReturnRoute({ onSaveRoute }: ReturnRouteProps) {
             <p class="text-xs text-gray-500 truncate">${
               passenger.address || ""
             }</p>
-            <button class="passenger-toggle px-2 py-1 text-xs rounded border ${
-              isSelected
-                ? "border-green-200 text-green-700 bg-green-50"
-                : "border-green-600 text-green-600 bg-white"
-            }" data-passenger-id="${passenger.id}" data-selected="${
-              isSelected ? "true" : "false"
-            }">
-              ${isSelected ? "Remove passenger" : "Select passenger"}
-            </button>
+            ${
+              isQueued
+                ? `<span class="px-2 py-1 text-xs rounded border border-gray-200 text-gray-500">Queued</span>`
+                : `<button class="passenger-toggle px-2 py-1 text-xs rounded border ${
+                    isSelected
+                      ? "border-green-200 text-green-700 bg-green-50"
+                      : "border-green-600 text-green-600 bg-white"
+                  }" data-passenger-id="${passenger.id}" data-selected="${
+                    isSelected ? "true" : "false"
+                  }" data-queued="false">
+                    ${isSelected ? "Remove passenger" : "Select passenger"}
+                  </button>`
+            }
           </div>
         `;
           })
@@ -1210,15 +1327,19 @@ export function ReturnRoute({ onSaveRoute }: ReturnRouteProps) {
           <div class="p-2" style="min-width: 260px;">
             <div class="flex items-center justify-between mb-2 pb-2 border-b border-gray-200">
               <span class="text-xs font-bold text-green-600">${passengerCount} Passengers at this location</span>
-              <button class="select-all-passengers px-2 py-1 text-xs rounded border ${
-                allSelected
-                  ? "border-green-200 text-green-700 bg-green-50"
-                  : "border-green-600 text-green-600 bg-white hover:bg-green-50"
-              }" data-passenger-ids="${allPassengerIds.join(
-          ","
-        )}" data-all-selected="${allSelected}">
-                ${allSelected ? "Deselect all" : "Select all"}
-              </button>
+              ${
+                selectablePassengerIds.length > 0
+                  ? `<button class="select-all-passengers px-2 py-1 text-xs rounded border ${
+                      allSelected
+                        ? "border-green-200 text-green-700 bg-green-50"
+                        : "border-green-600 text-green-600 bg-white hover:bg-green-50"
+                    }" data-passenger-ids="${selectablePassengerIds.join(
+                      ","
+                    )}" data-all-selected="${allSelected}">
+                      ${allSelected ? "Deselect all" : "Select all"}
+                    </button>`
+                  : `<span class="text-xs text-gray-500">All queued</span>`
+              }
             </div>
             <div id="${carouselId}" class="carousel-container">
               ${passengersHTML}
@@ -1336,17 +1457,22 @@ export function ReturnRoute({ onSaveRoute }: ReturnRouteProps) {
       markersRef.current.push(workMarker);
     });
 
-    // Group passengers by destination coordinates for drop-off markers
     const homeGroups = new Map<string, Location[]>();
-    filteredPassengers.forEach((passenger) => {
-      if (passenger.destinationCoordinates) {
-        const coordKey = `${passenger.destinationCoordinates[0]},${passenger.destinationCoordinates[1]}`;
-        if (!homeGroups.has(coordKey)) {
-          homeGroups.set(coordKey, []);
-        }
-        homeGroups.get(coordKey)!.push(passenger);
+    const dropPassengerIds = new Set<string>();
+    const addDropPassenger = (passenger: Location) => {
+      if (!passenger.destinationCoordinates) return;
+      const passengerId = String(passenger.id);
+      if (dropPassengerIds.has(passengerId)) return;
+      dropPassengerIds.add(passengerId);
+      const coordKey = `${passenger.destinationCoordinates[0]},${passenger.destinationCoordinates[1]}`;
+      if (!homeGroups.has(coordKey)) {
+        homeGroups.set(coordKey, []);
       }
-    });
+      homeGroups.get(coordKey)!.push(passenger);
+    };
+
+    passengersToShow.forEach((passenger) => addDropPassenger(passenger));
+    queuedDestinationPassengers.forEach((passenger) => addDropPassenger(passenger));
 
     homeGroups.forEach((passengersAtHome, coordKey) => {
       const [lng, lat] = coordKey.split(",").map(Number);
@@ -1358,28 +1484,30 @@ export function ReturnRoute({ onSaveRoute }: ReturnRouteProps) {
         const isSelected = selectedPassengers
           .map((s) => String(s))
           .includes(String(passenger.id));
+        const isQueued = queuedPassengerIds.has(String(passenger.id));
         const displayTime = passenger.time ? passenger.time.slice(0, 5) : "";
 
         const homeEl = document.createElement("div");
         homeEl.style.display = "flex";
         homeEl.style.flexDirection = "column";
         homeEl.style.alignItems = "center";
-        homeEl.style.cursor = "pointer";
+        homeEl.style.cursor = isQueued ? "not-allowed" : "pointer";
         homeEl.style.transition = "all 0.2s";
 
         const isDummyHome = String(passenger.id).startsWith("DUMMY-");
+        const queuedPassengerColor = queuedPassengerColorMap.get(
+          String(passenger.id)
+        );
+        const homeTimeBg = queuedPassengerColor || "#036ffc";
+        const homeBgColor =
+          queuedPassengerColor ||
+          (isDummyHome ? "#000000" : isSelected ? "#3b82f5" : "#629dfc");
         homeEl.innerHTML = `
           <div style="
             width: ${isSelected ? "28px" : "22px"};
             height: ${isSelected ? "28px" : "22px"};
             border-radius: 50%;
-            background-color: ${
-              isDummyHome
-                ? "#000000"
-                : isSelected
-                ? "#3b82f5"
-                : "#629dfc"
-            };
+            background-color: ${homeBgColor};
             border: ${isSelected ? "3px solid white" : "2px solid white"};
             box-shadow: ${
               isSelected
@@ -1401,7 +1529,7 @@ export function ReturnRoute({ onSaveRoute }: ReturnRouteProps) {
           ${
             displayTime
               ? `<div style="
-            background-color: #036ffc;
+            background-color: ${homeTimeBg};
             color: white;
             font-size: 9px;
             font-weight: 600;
@@ -1414,10 +1542,12 @@ export function ReturnRoute({ onSaveRoute }: ReturnRouteProps) {
               : ""
           }`;
 
-        homeEl.addEventListener("click", () => {
-          homePopup.remove(); // hover-only popup
-          togglePassenger(passenger.id);
-        });
+        if (!isQueued) {
+          homeEl.addEventListener("click", () => {
+            homePopup.remove(); // hover-only popup
+            togglePassenger(passenger.id);
+          });
+        }
 
         const homePopup = new mapboxgl.Popup({
           closeButton: false,
@@ -1457,9 +1587,11 @@ export function ReturnRoute({ onSaveRoute }: ReturnRouteProps) {
                 : ""
             }
             ${
-              !isSelected
-                ? '<p class="text-xs text-green-600 font-medium cursor-pointer mt-1">Click marker to select</p>'
-                : ""
+              isQueued
+                ? '<p class="text-xs text-gray-500 font-medium mt-1">Already queued</p>'
+                : !isSelected
+                  ? '<p class="text-xs text-green-600 font-medium cursor-pointer mt-1">Click marker to select</p>'
+                  : ""
             }
           </div>
         `);
@@ -1484,11 +1616,15 @@ export function ReturnRoute({ onSaveRoute }: ReturnRouteProps) {
       const allDummyHome = passengersAtHome.every((p) =>
         String(p.id).startsWith("DUMMY-")
       );
+      const queuedHomeColor = passengersAtHome
+        .map((p) => queuedPassengerColorMap.get(String(p.id)))
+        .find(Boolean);
       const homeEl = document.createElement("div");
       homeEl.style.width = "28px";
       homeEl.style.height = "28px";
       homeEl.style.borderRadius = "50%";
-      homeEl.style.backgroundColor = allDummyHome ? "#000000" : "#629dfc";
+      homeEl.style.backgroundColor =
+        queuedHomeColor ?? (allDummyHome ? "#000000" : "#629dfc");
       homeEl.style.border = "3px solid white";
       homeEl.style.boxShadow = "0 4px 8px rgba(0,0,0,0.3)";
       homeEl.style.display = "flex";
@@ -1507,14 +1643,20 @@ export function ReturnRoute({ onSaveRoute }: ReturnRouteProps) {
           "-"
         )}`;
         const allPassengerIds = passengersAtHome.map((p) => String(p.id));
-        const allSelected = allPassengerIds.every((id) =>
-          selectedPassengers.map((s) => String(s)).includes(id)
+        const selectablePassengerIds = allPassengerIds.filter(
+          (id) => !queuedPassengerIds.has(id)
         );
+        const allSelected =
+          selectablePassengerIds.length > 0 &&
+          selectablePassengerIds.every((id) =>
+            selectedPassengers.map((s) => String(s)).includes(id)
+          );
         const passengersHTML = passengersAtHome
           .map((passenger, index) => {
             const isSelected = selectedPassengers
               .map((s) => String(s))
               .includes(String(passenger.id));
+            const isQueued = queuedPassengerIds.has(String(passenger.id));
             return `
           <div class="carousel-slide" data-index="${index}" style="display: ${
               index === 0 ? "block" : "none"
@@ -1540,15 +1682,19 @@ export function ReturnRoute({ onSaveRoute }: ReturnRouteProps) {
             <p class="text-xs text-gray-500 truncate">${
               passenger.destination || ""
             }</p>
-            <button class="passenger-toggle px-2 py-1 text-xs rounded border ${
-              isSelected
-                ? "border-green-200 text-green-700 bg-green-50"
-                : "border-green-600 text-green-600 bg-white"
-            }" data-passenger-id="${passenger.id}" data-selected="${
-              isSelected ? "true" : "false"
-            }">
-              ${isSelected ? "Remove passenger" : "Select passenger"}
-            </button>
+            ${
+              isQueued
+                ? `<span class="px-2 py-1 text-xs rounded border border-gray-200 text-gray-500">Queued</span>`
+                : `<button class="passenger-toggle px-2 py-1 text-xs rounded border ${
+                    isSelected
+                      ? "border-green-200 text-green-700 bg-green-50"
+                      : "border-green-600 text-green-600 bg-white"
+                  }" data-passenger-id="${passenger.id}" data-selected="${
+                    isSelected ? "true" : "false"
+                  }" data-queued="false">
+                    ${isSelected ? "Remove passenger" : "Select passenger"}
+                  </button>`
+            }
           </div>
         `;
           })
@@ -1558,15 +1704,19 @@ export function ReturnRoute({ onSaveRoute }: ReturnRouteProps) {
           <div class="p-2" style="min-width: 260px;">
             <div class="flex items-center justify-between mb-2 pb-2 border-b border-gray-200">
               <span class="text-xs font-bold text-green-600">${passengerCount} Passengers at this location</span>
-              <button class="select-all-home-passengers px-2 py-1 text-xs rounded border ${
-                allSelected
-                  ? "border-green-200 text-green-700 bg-green-50"
-                  : "border-green-600 text-green-600 bg-white hover:bg-green-50"
-              }" data-passenger-ids="${allPassengerIds.join(
-          ","
-        )}" data-all-selected="${allSelected}">
-                ${allSelected ? "Deselect all" : "Select all"}
-              </button>
+              ${
+                selectablePassengerIds.length > 0
+                  ? `<button class="select-all-home-passengers px-2 py-1 text-xs rounded border ${
+                      allSelected
+                        ? "border-green-200 text-green-700 bg-green-50"
+                        : "border-green-600 text-green-600 bg-white hover:bg-green-50"
+                    }" data-passenger-ids="${selectablePassengerIds.join(
+                      ","
+                    )}" data-all-selected="${allSelected}">
+                      ${allSelected ? "Deselect all" : "Select all"}
+                    </button>`
+                  : `<span class="text-xs text-gray-500">All queued</span>`
+              }
             </div>
             <div id="${carouselId}" class="carousel-container">
               ${passengersHTML}
@@ -1846,6 +1996,7 @@ export function ReturnRoute({ onSaveRoute }: ReturnRouteProps) {
               "line-color": routeColors[routeColorIndex].primary,
               "line-width": 5,
               "line-opacity": 0.8,
+              "line-dasharray": [1, 0],
             },
           });
         }
@@ -1898,6 +2049,7 @@ export function ReturnRoute({ onSaveRoute }: ReturnRouteProps) {
     setDriversData([]);
     setPassengersData([]);
     clearSelections();
+    setPendingRoutes([]);
     setShowClearDialog(false);
   };
 
@@ -1975,26 +2127,32 @@ export function ReturnRoute({ onSaveRoute }: ReturnRouteProps) {
     }
   };
 
-  const saveRoute = () => {
-    if (!selectedDriver || selectedPassengers.length === 0 || !routeInfo)
-      return;
+  const getDefaultRouteName = () =>
+    `RR ${returnRoutes.length + pendingRoutes.length + 1}`;
+
+  const buildRoutePayload = ({
+    overrideName,
+    overrideColor,
+  }: {
+    overrideName?: string;
+    overrideColor?: { primary: string; name: string };
+  } = {}): SavedRoute | null => {
+    if (!selectedDriver || selectedPassengers.length === 0 || !routeInfo) {
+      return null;
+    }
 
     const driverSnapshot = currentDriver
       ? toParticipantSnapshot(currentDriver)
       : undefined;
     const passengerSnapshots = currentPassengers.map(toParticipantSnapshot);
 
-    const editingRoute = editingRouteId
-      ? storedRoutes.find((r) => r.id === editingRouteId)
-      : undefined;
-
-    const newRoute: SavedRoute = {
+    return {
       id: `route-${Date.now()}`,
-      name: editingRoute ? editingRoute.name : `RR ${returnRoutes.length + 1}`,
+      name: overrideName ?? getDefaultRouteName(),
       driverId: selectedDriver,
-      passengerIds: selectedPassengers,
-      routeInfo: routeInfo,
-      color: editingRoute ? editingRoute.color : routeColors[routeColorIndex],
+      passengerIds: selectedPassengers.map((id) => String(id)),
+      routeInfo,
+      color: overrideColor ?? routeColors[routeColorIndex],
       visible: true,
       createdAt: new Date().toISOString(),
       routeType: "return",
@@ -2003,6 +2161,138 @@ export function ReturnRoute({ onSaveRoute }: ReturnRouteProps) {
       date: selectedDate,
       shift: selectedShift,
     };
+  };
+
+  const applyQueuedRouteForEditing = (route: SavedRoute) => {
+    const colorIndex = routeColors.findIndex(
+      (c) => c.primary === route.color.primary
+    );
+    setRouteColorIndex(colorIndex >= 0 ? colorIndex : 0);
+    setSelectedDriver(route.driverId ?? null);
+    setSelectedPassengers(route.passengerIds.map((id) => String(id)));
+    setRouteInfo(route.routeInfo);
+    setShowBottomPanel(true);
+    setPendingRoutes((prev) => prev.filter((r) => r.id !== route.id));
+    setEditingQueuedRoute({
+      id: route.id,
+      name: route.name,
+      color: route.color,
+    });
+  };
+
+  const queueRoute = () => {
+    if (editingRouteId) return;
+    const queuedRoute = buildRoutePayload({
+      overrideName: editingQueuedRoute?.name,
+      overrideColor: editingQueuedRoute?.color,
+    });
+    if (!queuedRoute) return;
+    setPendingRoutes((prev) => [...prev, queuedRoute]);
+    clearSelections();
+    setRouteColorIndex((prev) => (prev + 1) % routeColors.length);
+    if (editingQueuedRoute) {
+      setEditingQueuedRoute(null);
+    }
+  };
+
+  const removePendingRoute = (routeId: string) => {
+    setPendingRoutes((prev) => prev.filter((route) => route.id !== routeId));
+  };
+
+  const flushPendingRoutes = () => {
+    if (pendingRoutes.length === 0) {
+      return;
+    }
+    dispatch(
+      saveRouteData({
+        routeType: "return",
+        shift: normalizedShift,
+        date: selectedDate,
+        drivers: driversData,
+        passengers: passengersData,
+      })
+    );
+    pendingRoutes.forEach((route) => onSaveRoute(route));
+    setPendingRoutes([]);
+  };
+
+  const canQueueRoute =
+    !editingRouteId &&
+    Boolean(selectedDriver) &&
+    selectedPassengers.length > 0 &&
+    Boolean(routeInfo);
+
+  const renderQueuedRoutes = () => {
+    if (!map.current) return;
+
+    queuedLayerIdsRef.current.forEach((layerId) => {
+      if (map.current!.getLayer(layerId)) {
+        map.current!.removeLayer(layerId);
+      }
+      if (map.current!.getSource(layerId)) {
+        map.current!.removeSource(layerId);
+      }
+    });
+    queuedLayerIdsRef.current.clear();
+
+    pendingRoutes.forEach((route) => {
+      const layerId = `queued-route-return-${route.id}`;
+      queuedLayerIdsRef.current.add(layerId);
+
+      if (!map.current!.getSource(layerId)) {
+        map.current!.addSource(layerId, {
+          type: "geojson",
+          data: route.routeInfo.route,
+        });
+      } else {
+        (map.current!.getSource(layerId) as mapboxgl.GeoJSONSource).setData(
+          route.routeInfo.route
+        );
+      }
+
+      map.current!.addLayer({
+        id: layerId,
+        type: "line",
+        source: layerId,
+        layout: {
+          "line-join": "round",
+          "line-cap": "round",
+        },
+        paint: {
+          "line-color": route.color.primary,
+          "line-width": 5,
+          "line-opacity": 0.6,
+          "line-dasharray": [1, 0],
+        },
+      });
+    });
+  };
+
+  useEffect(() => {
+    if (!map.current) return;
+
+    if (!map.current.isStyleLoaded()) {
+      map.current.once("load", () => {
+        renderQueuedRoutes();
+      });
+      return;
+    }
+
+    renderQueuedRoutes();
+  }, [pendingRoutes]);
+
+  const saveRoute = () => {
+    const editingRoute = editingRouteId
+      ? storedRoutes.find((r) => r.id === editingRouteId)
+      : undefined;
+
+    const newRoute = buildRoutePayload({
+      overrideName: editingRoute ? editingRoute.name : undefined,
+      overrideColor: editingRoute ? editingRoute.color : undefined,
+    });
+    if (!newRoute) {
+      return;
+    }
 
     if (editingRouteId) {
       dispatch(deleteRoute(editingRouteId));
@@ -3000,12 +3290,100 @@ export function ReturnRoute({ onSaveRoute }: ReturnRouteProps) {
                     <X className="w-4 h-4 mr-2" />
                     Clear
                   </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={queueRoute}
+                    disabled={!canQueueRoute}
+                    className="h-9"
+                  >
+                    <List className="w-4 h-4 mr-2" />
+                    Queue Route
+                  </Button>
                   <Button onClick={saveRoute} className="h-9">
                     <Save className="w-4 h-4 mr-2" />
                     Save Route
                   </Button>
                 </div>
               </div>
+            </div>
+          </div>
+        )}
+        {pendingRoutes.length > 0 && (
+          <div className="absolute bottom-32 right-4 z-40 w-80 max-h-[320px]">
+            <div className="flex flex-col gap-3 rounded-2xl border bg-white p-3 shadow-lg">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <List className="w-4 h-4 text-gray-600" />
+                  <div>
+                    <p className="text-xs font-semibold text-gray-900">
+                      Queued {routeTypeLabel} routes
+                    </p>
+                    <p className="text-[11px] text-gray-500">
+                      {pendingRoutes.length} route
+                      {pendingRoutes.length > 1 ? "s" : ""} ready to save
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setPendingRoutes([])}
+                  className="text-xs font-medium text-blue-600 hover:text-blue-800"
+                >
+                  Clear
+                </button>
+              </div>
+              <div className="space-y-2 max-h-48 overflow-y-auto">
+                {pendingRoutes.map((route) => (
+                  <div
+                    key={route.id}
+                    className="flex items-center gap-2 rounded-lg bg-gray-50 px-3 py-2"
+                  >
+                    <span
+                      className="inline-block h-2 w-2 rounded-full"
+                      style={{ backgroundColor: route.color.primary }}
+                    />
+                    <div className="flex flex-1 flex-col gap-0.5 text-xs">
+                      <div className="text-xs font-semibold text-gray-900 truncate">
+                        {route.name}
+                      </div>
+                      <div className="flex items-center justify-between text-[11px] text-gray-500">
+                        <span>
+                          {route.driverSnapshot?.name || "Driver"} •{" "}
+                          {route.passengerIds.length} passengers
+                        </span>
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              applyQueuedRouteForEditing(route);
+                            }}
+                            className="text-gray-400 hover:text-gray-600"
+                            aria-label="Edit queued route"
+                          >
+                            <Edit3 className="w-4 h-4" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              removePendingRoute(route.id);
+                            }}
+                            className="text-gray-400 hover:text-gray-600"
+                            aria-label="Remove queued route"
+                          >
+                            <X className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <Button size="sm" onClick={flushPendingRoutes} className="w-full">
+                Save all ({pendingRoutes.length})
+              </Button>
             </div>
           </div>
         )}
