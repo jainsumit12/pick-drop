@@ -26,6 +26,8 @@ import {
   UserPlus,
   List,
   Edit3,
+  Eye,
+  EyeOff,
 } from "lucide-react";
 import { driversService, passengersService } from "../../api/services";
 import { RouteParticipant, SavedRoute, RouteInfo } from "../../types/route";
@@ -278,6 +280,7 @@ export function CreateRoute({ savedRoutes, onSaveRoute }: CreateRouteProps) {
   const [passengersLoading, setPassengersLoading] = useState(false);
   const [passengersError, setPassengersError] = useState<string | null>(null);
   const [pendingRoutes, setPendingRoutes] = useState<SavedRoute[]>([]);
+  const [hiddenQueuedRoutes, setHiddenQueuedRoutes] = useState<Set<string>>(new Set());
   const [editingQueuedRoute, setEditingQueuedRoute] = useState<{
     id: string;
     name: string;
@@ -420,9 +423,13 @@ export function CreateRoute({ savedRoutes, onSaveRoute }: CreateRouteProps) {
     if (id) usedPassengerIds.add(id);
   });
 
+  const visiblePendingRoutes = pendingRoutes.filter(
+    (route) => !hiddenQueuedRoutes.has(route.id)
+  );
+
   const queuedDriverColorMap = new Map<string, string>();
   const queuedPassengerColorMap = new Map<string, string>();
-  pendingRoutes.forEach((route) => {
+  visiblePendingRoutes.forEach((route) => {
     if (route.driverId) {
       queuedDriverColorMap.set(String(route.driverId), route.color.primary);
     }
@@ -431,12 +438,12 @@ export function CreateRoute({ savedRoutes, onSaveRoute }: CreateRouteProps) {
     });
   });
 
-  const queuedDriverLocations = pendingRoutes
+  const queuedDriverLocations = visiblePendingRoutes
     .map((route) => route.driverSnapshot)
     .filter((driver): driver is RouteParticipant => Boolean(driver))
     .map((driver) => snapshotToLocation(driver, "driver"));
 
-  const queuedPassengerLocations = pendingRoutes
+  const queuedPassengerLocations = visiblePendingRoutes
     .flatMap((route) => route.passengerSnapshots ?? [])
     .map((passenger) => snapshotToLocation(passenger, "passenger"));
 
@@ -716,6 +723,7 @@ export function CreateRoute({ savedRoutes, onSaveRoute }: CreateRouteProps) {
     driverSearch,
     checkedDrivers,
     pendingRoutes,
+    hiddenQueuedRoutes,
   ]);
 
   const updateMarkersAndRoute = () => {
@@ -2296,37 +2304,39 @@ export function CreateRoute({ savedRoutes, onSaveRoute }: CreateRouteProps) {
     });
     queuedLayerIdsRef.current.clear();
 
-    pendingRoutes.forEach((route) => {
-      const layerId = `queued-route-going-${route.id}`;
-      queuedLayerIdsRef.current.add(layerId);
+    pendingRoutes
+      .filter((route) => !hiddenQueuedRoutes.has(route.id))
+      .forEach((route) => {
+        const layerId = `queued-route-going-${route.id}`;
+        queuedLayerIdsRef.current.add(layerId);
 
-      if (!map.current!.getSource(layerId)) {
-        map.current!.addSource(layerId, {
-          type: "geojson",
-          data: route.routeInfo.route,
+        if (!map.current!.getSource(layerId)) {
+          map.current!.addSource(layerId, {
+            type: "geojson",
+            data: route.routeInfo.route,
+          });
+        } else {
+          (map.current!.getSource(layerId) as mapboxgl.GeoJSONSource).setData(
+            route.routeInfo.route
+          );
+        }
+
+        map.current!.addLayer({
+          id: layerId,
+          type: "line",
+          source: layerId,
+          layout: {
+            "line-join": "round",
+            "line-cap": "round",
+          },
+          paint: {
+            "line-color": route.color.primary,
+            "line-width": 5,
+            "line-opacity": 0.6,
+            "line-dasharray": [1, 0],
+          },
         });
-      } else {
-        (map.current!.getSource(layerId) as mapboxgl.GeoJSONSource).setData(
-          route.routeInfo.route
-        );
-      }
-
-      map.current!.addLayer({
-        id: layerId,
-        type: "line",
-        source: layerId,
-        layout: {
-          "line-join": "round",
-          "line-cap": "round",
-        },
-        paint: {
-          "line-color": route.color.primary,
-          "line-width": 5,
-          "line-opacity": 0.6,
-          "line-dasharray": [1, 0],
-        },
       });
-    });
   };
 
   useEffect(() => {
@@ -2340,7 +2350,7 @@ export function CreateRoute({ savedRoutes, onSaveRoute }: CreateRouteProps) {
     }
 
     renderQueuedRoutes();
-  }, [pendingRoutes]);
+  }, [pendingRoutes, hiddenQueuedRoutes]);
 
   const saveRoute = () => {
     const editingRoute = editingRouteId
@@ -3373,36 +3383,57 @@ export function CreateRoute({ savedRoutes, onSaveRoute }: CreateRouteProps) {
                       <div className="text-xs font-semibold text-gray-900 truncate">
                         {route.name}
                       </div>
-                      <div className="flex items-center justify-between text-[11px] text-gray-500">
-                        <span>
-                          {route.driverSnapshot?.name || "Driver"} •{" "}
-                          {route.passengerIds.length} passengers
-                        </span>
-                        <div className="flex items-center gap-2">
-                          <button
-                            type="button"
-                            onClick={(event) => {
-                              event.stopPropagation();
-                              applyQueuedRouteForEditing(route);
-                            }}
-                            className="text-gray-400 hover:text-gray-600"
-                            aria-label="Edit queued route"
-                          >
-                            <Edit3 className="w-4 h-4" />
-                          </button>
-                          <button
-                            type="button"
-                            onClick={(event) => {
-                              event.stopPropagation();
-                              removePendingRoute(route.id);
-                            }}
-                            className="text-gray-400 hover:text-gray-600"
-                            aria-label="Remove queued route"
-                          >
-                            <X className="w-4 h-4" />
-                          </button>
-                        </div>
+                      <div className="text-[11px] text-gray-500">
+                        {route.driverSnapshot?.name || "Driver"} •{" "}
+                        {route.passengerIds.length} passengers
                       </div>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0 ml-2">
+                      <button
+                        type="button"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          setHiddenQueuedRoutes((prev) => {
+                            const next = new Set(prev);
+                            if (next.has(route.id)) {
+                              next.delete(route.id);
+                            } else {
+                              next.add(route.id);
+                            }
+                            return next;
+                          });
+                        }}
+                        className="text-gray-500 hover:text-gray-700"
+                        aria-label="Toggle queued route visibility"
+                      >
+                        {hiddenQueuedRoutes.has(route.id) ? (
+                          <EyeOff className="w-4 h-4" />
+                        ) : (
+                          <Eye className="w-4 h-4" />
+                        )}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          applyQueuedRouteForEditing(route);
+                        }}
+                        className="text-gray-500 hover:text-gray-700"
+                        aria-label="Edit queued route"
+                      >
+                        <Edit3 className="w-4 h-4" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          removePendingRoute(route.id);
+                        }}
+                        className="text-gray-500 hover:text-gray-700"
+                        aria-label="Remove queued route"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
                     </div>
                   </div>
                 ))}
