@@ -27,6 +27,8 @@ import {
   UserPlus,
   List,
   Edit3,
+  Eye,
+  EyeOff,
 } from "lucide-react";
 import { driversService, passengersService } from "../../api/services";
 import { RouteParticipant, SavedRoute, RouteInfo } from "../../types/route";
@@ -306,6 +308,7 @@ export function ReturnRoute({ onSaveRoute }: ReturnRouteProps) {
   const [passengersLoading, setPassengersLoading] = useState(false);
   const [passengersError, setPassengersError] = useState<string | null>(null);
   const [pendingRoutes, setPendingRoutes] = useState<SavedRoute[]>([]);
+  const [hiddenQueuedRoutes, setHiddenQueuedRoutes] = useState<Set<string>>(new Set());
   const [editingQueuedRoute, setEditingQueuedRoute] = useState<{
     id: string;
     name: string;
@@ -318,6 +321,7 @@ export function ReturnRoute({ onSaveRoute }: ReturnRouteProps) {
   const [showShiftDropdown, setShowShiftDropdown] = useState(false);
   const [showDateDropdown, setShowDateDropdown] = useState(false);
   const [showOccupiedDropdown, setShowOccupiedDropdown] = useState(false);
+  const [occupiedDriverSearch, setOccupiedDriverSearch] = useState("");
   const [showDummyPassengerModal, setShowDummyPassengerModal] = useState(false);
 
   // Filter states
@@ -438,9 +442,13 @@ export function ReturnRoute({ onSaveRoute }: ReturnRouteProps) {
     if (id) usedPassengerIds.add(id);
   });
 
+  const visiblePendingRoutes = pendingRoutes.filter(
+    (route) => !hiddenQueuedRoutes.has(route.id)
+  );
+
   const queuedDriverColorMap = new Map<string, string>();
   const queuedPassengerColorMap = new Map<string, string>();
-  pendingRoutes.forEach((route) => {
+  visiblePendingRoutes.forEach((route) => {
     if (route.driverId) {
       queuedDriverColorMap.set(String(route.driverId), route.color.primary);
     }
@@ -449,12 +457,12 @@ export function ReturnRoute({ onSaveRoute }: ReturnRouteProps) {
     });
   });
 
-  const queuedDriverLocations = pendingRoutes
+  const queuedDriverLocations = visiblePendingRoutes
     .map((route) => route.driverSnapshot)
     .filter((driver): driver is RouteParticipant => Boolean(driver))
     .map((driver) => snapshotToLocation(driver, "driver"));
 
-  const queuedPassengerLocations = pendingRoutes
+  const queuedPassengerLocations = visiblePendingRoutes
     .flatMap((route) => route.passengerSnapshots ?? [])
     .map((passenger) => snapshotToLocation(passenger, "passenger"));
 
@@ -745,6 +753,7 @@ export function ReturnRoute({ onSaveRoute }: ReturnRouteProps) {
     driverSearch,
     checkedDrivers,
     pendingRoutes,
+    hiddenQueuedRoutes,
   ]);
 
   const updateMarkersAndRoute = () => {
@@ -2235,37 +2244,39 @@ export function ReturnRoute({ onSaveRoute }: ReturnRouteProps) {
     });
     queuedLayerIdsRef.current.clear();
 
-    pendingRoutes.forEach((route) => {
-      const layerId = `queued-route-return-${route.id}`;
-      queuedLayerIdsRef.current.add(layerId);
+    pendingRoutes
+      .filter((route) => !hiddenQueuedRoutes.has(route.id))
+      .forEach((route) => {
+        const layerId = `queued-route-return-${route.id}`;
+        queuedLayerIdsRef.current.add(layerId);
 
-      if (!map.current!.getSource(layerId)) {
-        map.current!.addSource(layerId, {
-          type: "geojson",
-          data: route.routeInfo.route,
+        if (!map.current!.getSource(layerId)) {
+          map.current!.addSource(layerId, {
+            type: "geojson",
+            data: route.routeInfo.route,
+          });
+        } else {
+          (map.current!.getSource(layerId) as mapboxgl.GeoJSONSource).setData(
+            route.routeInfo.route
+          );
+        }
+
+        map.current!.addLayer({
+          id: layerId,
+          type: "line",
+          source: layerId,
+          layout: {
+            "line-join": "round",
+            "line-cap": "round",
+          },
+          paint: {
+            "line-color": route.color.primary,
+            "line-width": 5,
+            "line-opacity": 0.6,
+            "line-dasharray": [1, 0],
+          },
         });
-      } else {
-        (map.current!.getSource(layerId) as mapboxgl.GeoJSONSource).setData(
-          route.routeInfo.route
-        );
-      }
-
-      map.current!.addLayer({
-        id: layerId,
-        type: "line",
-        source: layerId,
-        layout: {
-          "line-join": "round",
-          "line-cap": "round",
-        },
-        paint: {
-          "line-color": route.color.primary,
-          "line-width": 5,
-          "line-opacity": 0.6,
-          "line-dasharray": [1, 0],
-        },
       });
-    });
   };
 
   useEffect(() => {
@@ -2279,7 +2290,7 @@ export function ReturnRoute({ onSaveRoute }: ReturnRouteProps) {
     }
 
     renderQueuedRoutes();
-  }, [pendingRoutes]);
+  }, [pendingRoutes, hiddenQueuedRoutes]);
 
   const saveRoute = () => {
     const editingRoute = editingRouteId
@@ -3015,46 +3026,132 @@ export function ReturnRoute({ onSaveRoute }: ReturnRouteProps) {
               <ChevronDown className="w-3 h-3 text-gray-400 flex-shrink-0" />
             </button>
 
-            {showOccupiedDropdown && (
-              <div className="absolute top-full mt-1 bg-white border rounded-lg shadow-lg w-80 z-30">
-                <div className="p-3 border-b text-sm text-gray-600">
-                  Not available drivers ({occupiedDriverCount})
-                </div>
-                <div className="max-h-64 overflow-y-auto">
-                  {occupiedDrivers.length === 0 ? (
-                    <div className="px-4 py-6 text-center text-xs text-gray-500">
-                      No occupied drivers currently.
+            {showOccupiedDropdown && (() => {
+              const filteredOccupiedDrivers = occupiedDrivers.filter((driver) => {
+                if (!occupiedDriverSearch.trim()) return true;
+                const q = occupiedDriverSearch.toLowerCase();
+                return (
+                  driver.name?.toLowerCase().includes(q) ||
+                  String(driver.id).toLowerCase().includes(q) ||
+                  driver.subPoint?.toLowerCase().includes(q) ||
+                  driver.phone?.toLowerCase().includes(q)
+                );
+              });
+              const checkedOccupiedCount = filteredOccupiedDrivers.filter((d) =>
+                checkedDrivers.includes(d.id)
+              ).length;
+              return (
+                <div className="absolute top-full mt-1 bg-white border rounded-lg shadow-lg w-96 z-30">
+                  <div className="p-2 border-b">
+                    <div className="relative mb-2">
+                      <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                      <input
+                        type="text"
+                        placeholder="Search occupied drivers..."
+                        value={occupiedDriverSearch}
+                        onChange={(e) => setOccupiedDriverSearch(e.target.value)}
+                        className="w-full pl-9 pr-3 py-2 text-sm border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      />
                     </div>
-                  ) : (
-                    occupiedDrivers.map((driver) => (
-                      <label
-                        key={`${driver.id}-occupied`}
-                        className="flex items-start gap-2 px-4 py-3 border-b last:border-b-0 text-xs leading-tight cursor-pointer"
-                        onClick={(e) => e.stopPropagation()}
-                      >
-                        <input
-                          type="checkbox"
-                          checked={checkedDrivers.includes(driver.id)}
-                          onChange={(e) => {
-                            e.stopPropagation();
-                            toggleDriverVisibility(driver.id);
-                          }}
-                          className="mt-1 w-3 h-3 text-blue-600 rounded focus:ring-blue-500"
-                        />
-                        <span className="flex-1 min-w-0">
-                          <p className="font-medium text-gray-700 truncate">
-                            {driver.name}
-                          </p>
-                          <p className="text-[11px] text-gray-500">
-                            {driver.id} • {driver.subPoint}
-                          </p>
-                        </span>
-                      </label>
-                    ))
-                  )}
+                    {filteredOccupiedDrivers.length > 0 && (
+                      <div className="flex items-center justify-between">
+                        <p className="text-xs text-gray-500">
+                          {checkedOccupiedCount} of {filteredOccupiedDrivers.length} on map
+                        </p>
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => {
+                              setCheckedDrivers((prev) => {
+                                const ids = filteredOccupiedDrivers.map((d) => d.id);
+                                const merged = new Set([...prev, ...ids]);
+                                return Array.from(merged);
+                              });
+                            }}
+                            className="text-xs text-blue-600 hover:underline"
+                          >
+                            Select all
+                          </button>
+                          {checkedOccupiedCount > 0 && (
+                            <button
+                              onClick={() => {
+                                const ids = new Set(filteredOccupiedDrivers.map((d) => d.id));
+                                setCheckedDrivers((prev) => prev.filter((id) => !ids.has(id)));
+                              }}
+                              className="text-xs text-red-600 hover:underline"
+                            >
+                              Clear all
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                  <div className="max-h-80 overflow-y-auto">
+                    {filteredOccupiedDrivers.length === 0 ? (
+                      <div className="px-4 py-6 text-center text-xs text-gray-500">
+                        {occupiedDriverSearch.trim()
+                          ? "No matching occupied drivers."
+                          : "No occupied drivers currently."}
+                      </div>
+                    ) : (
+                      filteredOccupiedDrivers.map((driver) => (
+                        <div
+                          key={`${driver.id}-occupied`}
+                          className={`flex items-center gap-3 px-4 py-3 hover:bg-gray-50 border-b last:border-b-0 ${
+                            checkedDrivers.includes(driver.id) ? "bg-blue-50" : ""
+                          }`}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={checkedDrivers.includes(driver.id)}
+                            onChange={(e) => {
+                              e.stopPropagation();
+                              toggleDriverVisibility(driver.id);
+                            }}
+                            className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500 cursor-pointer"
+                          />
+                          <div
+                            className={`w-10 h-10 rounded-full flex items-center justify-center ${
+                              checkedDrivers.includes(driver.id)
+                                ? "bg-red-500"
+                                : "bg-gray-200"
+                            }`}
+                          >
+                            <Car
+                              className={`w-5 h-5 ${
+                                checkedDrivers.includes(driver.id)
+                                  ? "text-white"
+                                  : "text-gray-600"
+                              }`}
+                            />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="font-medium text-sm truncate">
+                              {driver.name}{" "}
+                              <span className="text-xs text-gray-400">
+                                ({driver.id})
+                              </span>
+                              {driver.time && (
+                                <span className="text-xs text-gray-500">
+                                  {" "}- {driver.time}
+                                </span>
+                              )}
+                            </p>
+                            <div className="flex items-center gap-2 text-xs text-gray-500">
+                              <MapPin className="w-3 h-3" />
+                              <span>{driver.subPoint}</span>
+                              <span>•</span>
+                              <Phone className="w-3 h-3" />
+                              <span>{driver.phone}</span>
+                            </div>
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
                 </div>
-              </div>
-            )}
+              );
+            })()}
           </div>
 
           {/* Route Info Display */}
@@ -3347,36 +3444,57 @@ export function ReturnRoute({ onSaveRoute }: ReturnRouteProps) {
                       <div className="text-xs font-semibold text-gray-900 truncate">
                         {route.name}
                       </div>
-                      <div className="flex items-center justify-between text-[11px] text-gray-500">
-                        <span>
-                          {route.driverSnapshot?.name || "Driver"} •{" "}
-                          {route.passengerIds.length} passengers
-                        </span>
-                        <div className="flex items-center gap-2">
-                          <button
-                            type="button"
-                            onClick={(event) => {
-                              event.stopPropagation();
-                              applyQueuedRouteForEditing(route);
-                            }}
-                            className="text-gray-400 hover:text-gray-600"
-                            aria-label="Edit queued route"
-                          >
-                            <Edit3 className="w-4 h-4" />
-                          </button>
-                          <button
-                            type="button"
-                            onClick={(event) => {
-                              event.stopPropagation();
-                              removePendingRoute(route.id);
-                            }}
-                            className="text-gray-400 hover:text-gray-600"
-                            aria-label="Remove queued route"
-                          >
-                            <X className="w-4 h-4" />
-                          </button>
-                        </div>
+                      <div className="text-[11px] text-gray-500">
+                        {route.driverSnapshot?.name || "Driver"} •{" "}
+                        {route.passengerIds.length} passengers
                       </div>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0 ml-2">
+                      <button
+                        type="button"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          setHiddenQueuedRoutes((prev) => {
+                            const next = new Set(prev);
+                            if (next.has(route.id)) {
+                              next.delete(route.id);
+                            } else {
+                              next.add(route.id);
+                            }
+                            return next;
+                          });
+                        }}
+                        className="text-gray-500 hover:text-gray-700"
+                        aria-label="Toggle queued route visibility"
+                      >
+                        {hiddenQueuedRoutes.has(route.id) ? (
+                          <EyeOff className="w-4 h-4" />
+                        ) : (
+                          <Eye className="w-4 h-4" />
+                        )}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          applyQueuedRouteForEditing(route);
+                        }}
+                        className="text-gray-500 hover:text-gray-700"
+                        aria-label="Edit queued route"
+                      >
+                        <Edit3 className="w-4 h-4" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          removePendingRoute(route.id);
+                        }}
+                        className="text-gray-500 hover:text-gray-700"
+                        aria-label="Remove queued route"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
                     </div>
                   </div>
                 ))}

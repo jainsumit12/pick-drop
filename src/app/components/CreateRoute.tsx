@@ -293,6 +293,7 @@ export function CreateRoute({ savedRoutes, onSaveRoute }: CreateRouteProps) {
   const [showShiftDropdown, setShowShiftDropdown] = useState(false);
   const [showDateDropdown, setShowDateDropdown] = useState(false);
   const [showOccupiedDropdown, setShowOccupiedDropdown] = useState(false);
+  const [occupiedDriverSearch, setOccupiedDriverSearch] = useState("");
 
   // Filter states
   const [checkedDrivers, setCheckedDrivers] = useState<string[]>([]); // Drivers visible on map
@@ -3036,46 +3037,132 @@ export function CreateRoute({ savedRoutes, onSaveRoute }: CreateRouteProps) {
               <ChevronDown className="w-3 h-3 text-gray-400 flex-shrink-0" />
             </button>
 
-            {showOccupiedDropdown && (
-              <div className="absolute top-full mt-1 bg-white border rounded-lg shadow-lg w-80 z-30">
-                <div className="p-3 border-b text-xs text-gray-600">
-                  Not available drivers ({occupiedDriverCount})
-                </div>
-                <div className="max-h-64 overflow-y-auto">
-                  {occupiedDrivers.length === 0 ? (
-                    <div className="px-4 py-6 text-center text-xs text-gray-500">
-                      No not available drivers currently.
+            {showOccupiedDropdown && (() => {
+              const filteredOccupiedDrivers = occupiedDrivers.filter((driver) => {
+                if (!occupiedDriverSearch.trim()) return true;
+                const q = occupiedDriverSearch.toLowerCase();
+                return (
+                  driver.name?.toLowerCase().includes(q) ||
+                  String(driver.id).toLowerCase().includes(q) ||
+                  driver.subPoint?.toLowerCase().includes(q) ||
+                  driver.phone?.toLowerCase().includes(q)
+                );
+              });
+              const checkedOccupiedCount = filteredOccupiedDrivers.filter((d) =>
+                checkedDrivers.includes(d.id)
+              ).length;
+              return (
+                <div className="absolute top-full mt-1 bg-white border rounded-lg shadow-lg w-96 z-30">
+                  <div className="p-2 border-b">
+                    <div className="relative mb-2">
+                      <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                      <input
+                        type="text"
+                        placeholder="Search occupied drivers..."
+                        value={occupiedDriverSearch}
+                        onChange={(e) => setOccupiedDriverSearch(e.target.value)}
+                        className="w-full pl-9 pr-3 py-2 text-sm border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      />
                     </div>
-                  ) : (
-                    occupiedDrivers.map((driver) => (
-                      <label
-                        key={`${driver.id}-occupied`}
-                        className="flex items-start gap-2 px-4 py-3 border-b last:border-b-0 text-xs leading-tight cursor-pointer"
-                        onClick={(e) => e.stopPropagation()}
-                      >
-                        <input
-                          type="checkbox"
-                          checked={checkedDrivers.includes(driver.id)}
-                          onChange={(e) => {
-                            e.stopPropagation();
-                            toggleDriverVisibility(driver.id);
-                          }}
-                          className="mt-1 w-3 h-3 text-blue-600 rounded focus:ring-blue-500"
-                        />
-                        <span className="flex-1 min-w-0">
-                          <p className="font-medium text-gray-700 truncate">
-                            {driver.name}
-                          </p>
-                          <p className="text-[11px] text-gray-500">
-                            {driver.id} • {driver.subPoint}
-                          </p>
-                        </span>
-                      </label>
-                    ))
-                  )}
+                    {filteredOccupiedDrivers.length > 0 && (
+                      <div className="flex items-center justify-between">
+                        <p className="text-xs text-gray-500">
+                          {checkedOccupiedCount} of {filteredOccupiedDrivers.length} on map
+                        </p>
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => {
+                              setCheckedDrivers((prev) => {
+                                const ids = filteredOccupiedDrivers.map((d) => d.id);
+                                const merged = new Set([...prev, ...ids]);
+                                return Array.from(merged);
+                              });
+                            }}
+                            className="text-xs text-blue-600 hover:underline"
+                          >
+                            Select all
+                          </button>
+                          {checkedOccupiedCount > 0 && (
+                            <button
+                              onClick={() => {
+                                const ids = new Set(filteredOccupiedDrivers.map((d) => d.id));
+                                setCheckedDrivers((prev) => prev.filter((id) => !ids.has(id)));
+                              }}
+                              className="text-xs text-red-600 hover:underline"
+                            >
+                              Clear all
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                  <div className="max-h-80 overflow-y-auto">
+                    {filteredOccupiedDrivers.length === 0 ? (
+                      <div className="px-4 py-6 text-center text-xs text-gray-500">
+                        {occupiedDriverSearch.trim()
+                          ? "No matching occupied drivers."
+                          : "No occupied drivers currently."}
+                      </div>
+                    ) : (
+                      filteredOccupiedDrivers.map((driver) => (
+                        <div
+                          key={`${driver.id}-occupied`}
+                          className={`flex items-center gap-3 px-4 py-3 hover:bg-gray-50 border-b last:border-b-0 ${
+                            checkedDrivers.includes(driver.id) ? "bg-blue-50" : ""
+                          }`}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={checkedDrivers.includes(driver.id)}
+                            onChange={(e) => {
+                              e.stopPropagation();
+                              toggleDriverVisibility(driver.id);
+                            }}
+                            className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500 cursor-pointer"
+                          />
+                          <div
+                            className={`w-10 h-10 rounded-full flex items-center justify-center ${
+                              checkedDrivers.includes(driver.id)
+                                ? "bg-red-500"
+                                : "bg-gray-200"
+                            }`}
+                          >
+                            <Car
+                              className={`w-5 h-5 ${
+                                checkedDrivers.includes(driver.id)
+                                  ? "text-white"
+                                  : "text-gray-600"
+                              }`}
+                            />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="font-medium text-sm truncate">
+                              {driver.name}{" "}
+                              <span className="text-xs text-gray-400">
+                                ({driver.id})
+                              </span>
+                              {driver.time && (
+                                <span className="text-xs text-gray-500">
+                                  {" "}- {driver.time}
+                                </span>
+                              )}
+                            </p>
+                            <div className="flex items-center gap-2 text-xs text-gray-500">
+                              <MapPin className="w-3 h-3" />
+                              <span>{driver.subPoint}</span>
+                              <span>•</span>
+                              <Phone className="w-3 h-3" />
+                              <span>{driver.phone}</span>
+                            </div>
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
                 </div>
-              </div>
-            )}
+              );
+            })()}
           </div>
 
           {/* Actions */}
