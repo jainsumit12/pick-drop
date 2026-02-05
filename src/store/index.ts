@@ -26,7 +26,20 @@ export const store = configureStore({
   middleware: (getDefaultMiddleware) =>
     getDefaultMiddleware({
       serializableCheck: {
-        ignoredActions: ['persist/PERSIST', 'persist/REHYDRATE'],
+        ignoredActions: [
+          'persist/PERSIST',
+          'persist/REHYDRATE',
+          'routes/addRoute',
+          'routes/addPendingGoingRoute',
+          'routes/addPendingReturnRoute',
+          'routes/setPendingGoingRoutes',
+          'routes/setPendingReturnRoutes',
+        ],
+        ignoredPaths: [
+          'routes.savedRoutes',
+          'routes.pendingGoingRoutes',
+          'routes.pendingReturnRoutes',
+        ],
       },
     }),
 });

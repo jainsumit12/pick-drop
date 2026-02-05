@@ -50,7 +50,12 @@ import {
   setReturnEditingRouteId,
 } from "../../store/slices/filterSlice";
 import { saveRouteData, clearRouteData } from "../../store/slices/dataSlice";
-import { deleteRoute } from "../../store/slices/routesSlice";
+import {
+  deleteRoute,
+  addPendingReturnRoute,
+  removePendingReturnRoute,
+  clearPendingReturnRoutes,
+} from "../../store/slices/routesSlice";
 import { SHIFT_TYPES, normalizeShift } from "../../constants/shifts";
 
 interface Location {
@@ -256,6 +261,7 @@ export function ReturnRoute({ onSaveRoute }: ReturnRouteProps) {
     editingRouteId,
   } = useAppSelector((state) => state.filters.return);
   const storedRoutes = useAppSelector((state) => state.routes.savedRoutes);
+  const pendingRoutes = useAppSelector((state) => state.routes.pendingReturnRoutes) ?? [];
 
   const setSelectedDriver = (driver: string | null) => {
     dispatch(setReturnDriver(driver));
@@ -309,7 +315,7 @@ export function ReturnRoute({ onSaveRoute }: ReturnRouteProps) {
   const [passengersData, setPassengersData] = useState<ShiftPassenger[]>([]);
   const [passengersLoading, setPassengersLoading] = useState(false);
   const [passengersError, setPassengersError] = useState<string | null>(null);
-  const [pendingRoutes, setPendingRoutes] = useState<SavedRoute[]>([]);
+  // pendingRoutes now comes from Redux (pendingReturnRoutes)
   const [hiddenQueuedRoutes, setHiddenQueuedRoutes] = useState<Set<string>>(new Set());
   const [editingQueuedRoute, setEditingQueuedRoute] = useState<{
     id: string;
@@ -2060,7 +2066,7 @@ export function ReturnRoute({ onSaveRoute }: ReturnRouteProps) {
     setDriversData([]);
     setPassengersData([]);
     clearSelections();
-    setPendingRoutes([]);
+    dispatch(clearPendingReturnRoutes());
     setShowClearDialog(false);
   };
 
@@ -2183,7 +2189,7 @@ export function ReturnRoute({ onSaveRoute }: ReturnRouteProps) {
     setSelectedPassengers(route.passengerIds.map((id) => String(id)));
     setRouteInfo(route.routeInfo);
     setShowBottomPanel(true);
-    setPendingRoutes((prev) => prev.filter((r) => r.id !== route.id));
+    dispatch(removePendingReturnRoute(route.id));
     setEditingQueuedRoute({
       id: route.id,
       name: route.name,
@@ -2198,7 +2204,7 @@ export function ReturnRoute({ onSaveRoute }: ReturnRouteProps) {
       overrideColor: editingQueuedRoute?.color,
     });
     if (!queuedRoute) return;
-    setPendingRoutes((prev) => [...prev, queuedRoute]);
+    dispatch(addPendingReturnRoute(queuedRoute));
     clearSelections();
     setRouteColorIndex((prev) => (prev + 1) % routeColors.length);
     if (editingQueuedRoute) {
@@ -2207,7 +2213,7 @@ export function ReturnRoute({ onSaveRoute }: ReturnRouteProps) {
   };
 
   const removePendingRoute = (routeId: string) => {
-    setPendingRoutes((prev) => prev.filter((route) => route.id !== routeId));
+    dispatch(removePendingReturnRoute(routeId));
   };
 
   const flushPendingRoutes = () => {
@@ -2224,7 +2230,7 @@ export function ReturnRoute({ onSaveRoute }: ReturnRouteProps) {
       })
     );
     pendingRoutes.forEach((route) => onSaveRoute(route));
-    setPendingRoutes([]);
+    dispatch(clearPendingReturnRoutes());
   };
 
   const canQueueRoute =
@@ -3426,13 +3432,13 @@ export function ReturnRoute({ onSaveRoute }: ReturnRouteProps) {
                 </div>
                 <button
                   type="button"
-                  onClick={() => setPendingRoutes([])}
+                  onClick={() => dispatch(clearPendingReturnRoutes())}
                   className="text-xs font-medium text-blue-600 hover:text-blue-800"
                 >
                   Clear
                 </button>
               </div>
-              <div className="space-y-3 max-h-[360px] overflow-y-auto">
+              <div className="space-y-3 max-h-[360px] overflow-y-auto overflow-x-hidden">
                 {pendingRoutes.map((route) => {
                   const driverData = route.driverSnapshot;
                   const passengerSnapshots = route.passengerSnapshots || [];
@@ -3444,7 +3450,7 @@ export function ReturnRoute({ onSaveRoute }: ReturnRouteProps) {
                   return (
                     <div
                       key={route.id}
-                      className="rounded-xl border-2 shadow-md bg-white"
+                      className="rounded-xl border-2 shadow-md bg-white overflow-hidden"
                       style={{ borderColor: route.color.primary }}
                     >
                       <div className="pt-2 pb-1 px-3">
@@ -3496,18 +3502,19 @@ export function ReturnRoute({ onSaveRoute }: ReturnRouteProps) {
                           </button>
                         </div>
                         <div className="flex items-start justify-between mt-1">
-                          <div className="flex items-center gap-2 flex-1">
+                          <div className="flex items-start gap-2 flex-1 min-w-0">
                             <div
+                              className="self-stretch"
                               style={{
                                 width: "6px",
-                                height: "40px",
+                                minHeight: "40px",
                                 backgroundColor: route.color.primary,
                                 borderRadius: "3px",
                                 flexShrink: 0,
                               }}
                             />
-                            <div className="flex-1 min-w-0">
-                              <p className="text-[13px] font-semibold truncate">
+                            <div className="flex-1">
+                              <p className="text-[13px] font-semibold">
                                 <span style={{ color: route.color.primary, fontWeight: 700 }}>
                                   {route.name}
                                 </span>
@@ -3518,7 +3525,7 @@ export function ReturnRoute({ onSaveRoute }: ReturnRouteProps) {
                                 {driverData?.id ? ` - ${driverData.id}` : ""}
                                 {driverData?.subPoint ? ` - ${driverData.subPoint}` : ""}
                               </p>
-                              <div className="flex items-center gap-2 mt-0.5">
+                              <div className="flex items-center gap-2 mt-1">
                                 <p className="text-xs text-gray-500">
                                   {route.date}, {route.shift}
                                 </p>
