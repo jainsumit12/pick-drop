@@ -278,6 +278,7 @@ export function CreateRoute({ savedRoutes, onSaveRoute }: CreateRouteProps) {
   const markersRef = useRef<mapboxgl.Marker[]>([]);
   const selectedPassengersRef = useRef<string[]>(selectedPassengers);
   const queuedLayerIdsRef = useRef<Set<string>>(new Set());
+  const hasFetchedRef = useRef<string | null>(null);
   const [routeInfo, setRouteInfo] = useState<RouteInfo | null>(null);
   const [isCalculating, setIsCalculating] = useState(false);
   const [routeColorIndex, setRouteColorIndex] = useState(() => goingRoutes.length % 10);
@@ -340,8 +341,6 @@ export function CreateRoute({ savedRoutes, onSaveRoute }: CreateRouteProps) {
   const shifts = SHIFT_TYPES;
 
   const routeColors = [
-    { primary: "#3b82f6", name: "Blue" },
-    { primary: "#8b5cf6", name: "Purple" },
     { primary: "#ec4899", name: "Pink" },
     { primary: "#f59e0b", name: "Orange" },
     { primary: "#10b981", name: "Green" },
@@ -350,7 +349,30 @@ export function CreateRoute({ savedRoutes, onSaveRoute }: CreateRouteProps) {
     { primary: "#f97316", name: "Dark Orange" },
     { primary: "#14b8a6", name: "Teal" },
     { primary: "#a855f7", name: "Violet" },
+    { primary: "#3b82f6", name: "Blue" },
+    { primary: "#8b5cf6", name: "Purple" },
+    { primary: "#eab308", name: "Yellow" },
+    { primary: "#6366f1", name: "Indigo" },
+    { primary: "#f43f5e", name: "Rose" },
+    { primary: "#84cc16", name: "Lime" },
+    { primary: "#0ea5e9", name: "Sky" },
+    { primary: "#22c55e", name: "Emerald" },
   ];
+
+  // Get next available color that's not used by pending or saved routes
+  const getNextAvailableColorIndex = (currentIndex: number) => {
+    const usedColors = new Set([
+      ...pendingRoutes.map((r) => r.color.primary),
+      ...goingRoutes.map((r) => r.color.primary),
+    ]);
+    for (let i = 0; i < routeColors.length; i++) {
+      const index = (currentIndex + i) % routeColors.length;
+      if (!usedColors.has(routeColors[index].primary)) {
+        return index;
+      }
+    }
+    return currentIndex; // Fallback if all colors are used
+  };
   const routeType: "going" = "going";
   const routeTypeLabel = routeType.charAt(0).toUpperCase() + routeType.slice(1);
   const normalizedShift = normalizeShift(selectedShift);
@@ -388,6 +410,31 @@ export function CreateRoute({ savedRoutes, onSaveRoute }: CreateRouteProps) {
     setPassengersError(null);
     setCheckedDrivers([]);
   }, [normalizedShift, selectedDate, savedRouteData]);
+
+  // Auto-fetch data when component mounts and there's no cached data
+  useEffect(() => {
+    const cacheKey = `${selectedDate}-${normalizedShift}`;
+    const hasReduxData =
+      (savedRouteData?.drivers?.length ?? 0) > 0 ||
+      (savedRouteData?.passengers?.length ?? 0) > 0;
+
+    // Auto-fetch if no cached data and haven't fetched for this date/shift combination
+    if (!hasReduxData && hasFetchedRef.current !== cacheKey && !driversLoading && !passengersLoading) {
+      hasFetchedRef.current = cacheKey;
+      fetchRouteParticipants();
+    }
+  }, [selectedDate, normalizedShift, savedRouteData, driversLoading, passengersLoading]);
+
+  // Ensure current color is unique when pending or saved routes change
+  useEffect(() => {
+    const usedColors = new Set([
+      ...pendingRoutes.map((r) => r.color.primary),
+      ...goingRoutes.map((r) => r.color.primary),
+    ]);
+    if (usedColors.has(routeColors[routeColorIndex]?.primary)) {
+      setRouteColorIndex(getNextAvailableColorIndex(routeColorIndex));
+    }
+  }, [pendingRoutes, goingRoutes]);
 
   // Keep selectedPassengersRef in sync with selectedPassengers
   useEffect(() => {
@@ -2070,6 +2117,8 @@ export function CreateRoute({ savedRoutes, onSaveRoute }: CreateRouteProps) {
   };
 
   const handleConfirmClear = () => {
+    // Prevent auto-fetch after clearing
+    hasFetchedRef.current = `${selectedDate}-${normalizedShift}`;
     // Clear only the data for current date and shift
     dispatch(
       clearRouteData({
@@ -2194,7 +2243,8 @@ export function CreateRoute({ savedRoutes, onSaveRoute }: CreateRouteProps) {
   };
 
   const changeRouteColor = () => {
-    const nextIndex = (routeColorIndex + 1) % routeColors?.length;
+    // Skip to next available color not used by queued or saved routes
+    const nextIndex = getNextAvailableColorIndex((routeColorIndex + 1) % routeColors.length);
     setRouteColorIndex(nextIndex);
 
     if (map.current && map.current.getLayer("route")) {
@@ -2268,7 +2318,8 @@ export function CreateRoute({ savedRoutes, onSaveRoute }: CreateRouteProps) {
     if (!queuedRoute) return;
     dispatch(addPendingGoingRoute(queuedRoute));
     clearSelections();
-    setRouteColorIndex((prev) => (prev + 1) % routeColors.length);
+    // Get next unique color that's not used by other pending routes
+    setRouteColorIndex((prev) => getNextAvailableColorIndex((prev + 1) % routeColors.length));
     if (editingQueuedRoute) {
       setEditingQueuedRoute(null);
     }
