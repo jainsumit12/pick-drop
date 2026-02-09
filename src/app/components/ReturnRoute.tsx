@@ -77,6 +77,9 @@ interface Location {
 interface ReturnRouteProps {
   onSaveRoute: (route: SavedRoute) => void;
   driverLocationOverrides?: Record<string, [number, number]>;
+  fetchTrigger?: number;
+  combinedQueuedDrivers?: RouteParticipant[];
+  showQueueButton?: boolean;
 }
 
 // Helper function to extract clean name from rider name field
@@ -172,7 +175,13 @@ const convertRidersToLocations = (
   return riders.flatMap((rider) => {
     const lat = parseCoordinate(rider.HOME_LAT);
     const log = parseCoordinate(rider.HOME_LOG);
-    if (rider.SHIFT !== shift || lat === null || log === null) return [];
+    if (
+      normalizeShift(rider.SHIFT) !== normalizeShift(shift) ||
+      lat === null ||
+      log === null
+    ) {
+      return [];
+    }
 
     return [
       {
@@ -203,7 +212,7 @@ const convertPassengersToLocations = (
     const dropLog = parseCoordinate(passenger.DROP_LOG);
 
     if (
-      passenger.SHIFT !== shift ||
+      normalizeShift(passenger.SHIFT) !== normalizeShift(shift) ||
       pickupLat === null ||
       pickupLog === null ||
       dropLat === null ||
@@ -246,7 +255,13 @@ const convertPassengersToLocations = (
   }));
 };
 
-export function ReturnRoute({ onSaveRoute, driverLocationOverrides }: ReturnRouteProps) {
+export function ReturnRoute({
+  onSaveRoute,
+  driverLocationOverrides,
+  fetchTrigger,
+  combinedQueuedDrivers,
+  showQueueButton = true,
+}: ReturnRouteProps) {
   const dispatch = useAppDispatch();
   const {
     selectedDate,
@@ -348,6 +363,11 @@ export function ReturnRoute({ onSaveRoute, driverLocationOverrides }: ReturnRout
   const [showTimeDropdown, setShowTimeDropdown] = useState(false);
   const [showDriverTimeDropdown, setShowDriverTimeDropdown] = useState(false);
 
+  const safeTimeFilter = Array.isArray(timeFilter) ? timeFilter : [];
+  const safeDriverTimeFilter = Array.isArray(driverTimeFilter)
+    ? driverTimeFilter
+    : [];
+
   // Bottom panel state
   const [showBottomPanel, setShowBottomPanel] = useState(false);
   const [showClearDialog, setShowClearDialog] = useState(false);
@@ -440,19 +460,6 @@ export function ReturnRoute({ onSaveRoute, driverLocationOverrides }: ReturnRout
     setCheckedDrivers([]);
   }, [normalizedShift, selectedDate, savedRouteData]);
 
-  // Auto-fetch data when component mounts and there's no cached data
-  useEffect(() => {
-    const cacheKey = `${selectedDate}-${normalizedShift}`;
-    const hasReduxData =
-      (savedRouteData?.drivers.length ?? 0) > 0 ||
-      (savedRouteData?.passengers.length ?? 0) > 0;
-
-    // Auto-fetch if no cached data and haven't fetched for this date/shift combination
-    if (!hasReduxData && hasFetchedRef.current !== cacheKey && !driversLoading && !passengersLoading) {
-      hasFetchedRef.current = cacheKey;
-      fetchRouteParticipants();
-    }
-  }, [selectedDate, normalizedShift, savedRouteData, driversLoading, passengersLoading]);
 
   // Ensure current color is unique when pending or saved routes change
   useEffect(() => {
@@ -465,14 +472,38 @@ export function ReturnRoute({ onSaveRoute, driverLocationOverrides }: ReturnRout
     }
   }, [pendingRoutes, returnRoutes]);
 
+  const combinedAllowedDriverIds = driverLocationOverrides
+    ? new Set(Object.keys(driverLocationOverrides))
+    : null;
+
   // Get drivers for selected shift, applying location overrides from going route endpoints
   const rawDrivers = convertRidersToLocations(driversData, selectedShift);
+  const combinedOverrideDrivers = combinedQueuedDrivers
+    ? combinedQueuedDrivers
+        .map((d) => snapshotToLocation(d, "driver"))
+        .filter((d) => normalizeShift(d.shiftTime) === normalizeShift(selectedShift))
+        .map((d) => {
+          const override = driverLocationOverrides?.[d.id];
+          return override ? { ...d, coordinates: override } : d;
+        })
+    : [];
+
   const drivers = driverLocationOverrides
-    ? rawDrivers.map((d) => {
-        const override = driverLocationOverrides[d.id];
-        return override ? { ...d, coordinates: override } : d;
-      })
+    ? [
+        ...rawDrivers
+          .filter((d) => combinedAllowedDriverIds?.has(d.id))
+          .map((d) => {
+            const override = driverLocationOverrides[d.id];
+            return override ? { ...d, coordinates: override } : d;
+          }),
+        ...combinedOverrideDrivers.filter(
+          (d) => !rawDrivers.some((rd) => rd.id === d.id)
+        ),
+      ]
     : rawDrivers;
+  const homeDriversToShow = driverLocationOverrides
+    ? rawDrivers.filter((d) => combinedAllowedDriverIds?.has(d.id))
+    : [];
 
   // Get passengers for selected shift
   const passengers = convertPassengersToLocations(
@@ -550,7 +581,7 @@ export function ReturnRoute({ onSaveRoute, driverLocationOverrides }: ReturnRout
 
   // Extract unique filter options from passenger data (for Return: factory locations are "pickup", home locations are "destination")
   const rawPassengerData = passengersData.filter(
-    (p) => p.SHIFT === selectedShift
+    (p) => normalizeShift(p.SHIFT) === normalizeShift(selectedShift)
   );
   const pickupCities = [
     "All",
@@ -566,7 +597,9 @@ export function ReturnRoute({ onSaveRoute, driverLocationOverrides }: ReturnRout
   ];
 
   // Extract unique driver times
-  const rawDriverData = driversData.filter((r) => r.SHIFT === selectedShift);
+  const rawDriverData = driversData.filter(
+    (r) => normalizeShift(r.SHIFT) === normalizeShift(selectedShift)
+  );
   const driverTimes = Array.from(
     new Set(
       rawDriverData.map((r) => normalizeTime(r.TIME || "")).filter(Boolean)
@@ -592,12 +625,14 @@ export function ReturnRoute({ onSaveRoute, driverLocationOverrides }: ReturnRout
     const originalTime = normalizeTime(originalDriver?.TIME || "");
 
     // If no time filter selected, show all drivers
-    if (driverTimeFilter?.length === 0) {
+    if (safeDriverTimeFilter.length === 0) {
       return matchesSearch;
     }
 
     // If time filter selected, require matching time (normalized)
-    const normalizedFilter = driverTimeFilter?.map((t) => normalizeTime(t));
+    const normalizedFilter = safeDriverTimeFilter.map((t) =>
+      normalizeTime(t)
+    );
     const matchesTime =
       originalTime !== "" && normalizedFilter?.includes(originalTime);
 
@@ -633,8 +668,8 @@ export function ReturnRoute({ onSaveRoute, driverLocationOverrides }: ReturnRout
     );
 
     const matchesTime =
-      timeFilter.length === 0 ||
-      timeFilter.includes(originalPassenger?.TIME || "");
+      safeTimeFilter.length === 0 ||
+      safeTimeFilter.includes(originalPassenger?.TIME || "");
 
     return (
       matchesSearch &&
@@ -644,10 +679,20 @@ export function ReturnRoute({ onSaveRoute, driverLocationOverrides }: ReturnRout
     );
   });
 
-    const queuedDestinationPassengers = queuedPassengerLocations.filter(
+  const hasActivePassengerFilters =
+    pickupCityFilter !== "All" ||
+    destinationCityFilter !== "All" ||
+    safeTimeFilter.length > 0 ||
+    Boolean(passengerSearch?.trim());
+
+  const passengersForMap = hasActivePassengerFilters
+    ? filteredPassengers
+    : availablePassengers;
+
+  const queuedDestinationPassengers = queuedPassengerLocations.filter(
       (passenger) =>
         passenger.destinationCoordinates &&
-        !filteredPassengers.some(
+        !passengersForMap.some(
           (fp) =>
             String(fp.id) === String(passenger.id) &&
             fp.destinationCoordinates
@@ -1150,12 +1195,62 @@ export function ReturnRoute({ onSaveRoute, driverLocationOverrides }: ReturnRout
       markersRef.current.push(groupMarker);
     });
 
+    // Show driver home locations in combined return view
+    if (homeDriversToShow.length > 0) {
+      homeDriversToShow.forEach((driver) => {
+        const el = document.createElement("div");
+        el.style.display = "flex";
+        el.style.alignItems = "center";
+        el.style.justifyContent = "center";
+        el.style.cursor = "default";
+        el.innerHTML = `
+          <div style="
+            background-color: #6b7280;
+            color: white;
+            font-size: 9px;
+            font-weight: 700;
+            width: 18px;
+            height: 18px;
+            border-radius: 9px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.25);
+          ">H</div>
+        `;
+
+        const popup = new mapboxgl.Popup({
+          closeButton: false,
+          closeOnClick: false,
+        }).setHTML(`
+          <div class="p-2">
+            <strong class="block">${driver.name}, ${driver.id}</strong>
+            <p class="text-xs text-gray-600 mb-1"><strong>Home:</strong> ${driver.address}</p>
+            <p class="text-xs text-gray-500">${driver.subPoint}</p>
+          </div>
+        `);
+
+        el.addEventListener("mouseenter", () => {
+          popup.setLngLat(driver.coordinates).addTo(map.current!);
+        });
+        el.addEventListener("mouseleave", () => {
+          popup.remove();
+        });
+
+        const marker = new mapboxgl.Marker(el)
+          .setLngLat(driver.coordinates)
+          .addTo(map.current!);
+
+        markersRef.current.push(marker);
+      });
+    }
+
     // Add filtered + queued passenger markers with unique colors (work and home locations)
     const passengerIdSet = new Set(
-      filteredPassengers.map((p) => String(p.id))
+      passengersForMap.map((p) => String(p.id))
     );
     const passengersToShow = [
-      ...filteredPassengers,
+      ...passengersForMap,
       ...queuedPassengerLocations.filter(
         (passenger) => !passengerIdSet.has(String(passenger.id))
       ),
@@ -1907,14 +2002,17 @@ export function ReturnRoute({ onSaveRoute, driverLocationOverrides }: ReturnRout
     });
 
     // Auto-fit map to show all markers
-    if (markersRef.current.length > 0 && (filteredDrivers.length > 0 || filteredPassengers.length > 0)) {
+    if (
+      markersRef.current.length > 0 &&
+      (filteredDrivers.length > 0 || passengersForMap.length > 0)
+    ) {
       const bounds = new mapboxgl.LngLatBounds();
 
       // Add filtered driver coordinates
       filteredDrivers.forEach((driver) => bounds.extend(driver.coordinates));
 
       // Add all filtered passenger work and home coordinates
-      filteredPassengers.forEach((passenger) => {
+      passengersForMap.forEach((passenger) => {
         bounds.extend(passenger.coordinates);
         if (passenger.destinationCoordinates) {
           bounds.extend(passenger.destinationCoordinates);
@@ -2126,6 +2224,12 @@ export function ReturnRoute({ onSaveRoute, driverLocationOverrides }: ReturnRout
     setDriversData([]);
     setPassengersData([]);
     clearSelections();
+    dispatch(setReturnPickupCityFilter("All"));
+    dispatch(setReturnDestinationCityFilter("All"));
+    dispatch(setReturnTimeFilter([]));
+    dispatch(setReturnDriverTimeFilter([]));
+    dispatch(setReturnDriverSearch(""));
+    dispatch(setReturnPassengerSearch(""));
     dispatch(clearPendingReturnRoutes());
     setShowClearDialog(false);
   };
@@ -2467,6 +2571,11 @@ export function ReturnRoute({ onSaveRoute, driverLocationOverrides }: ReturnRout
     }
   };
 
+  useEffect(() => {
+    if (fetchTrigger === undefined) return;
+    fetchRouteParticipants();
+  }, [fetchTrigger]);
+
   return (
     <div className="h-full flex flex-col">
       {/* Top Navigation Bar */}
@@ -2670,10 +2779,10 @@ export function ReturnRoute({ onSaveRoute, driverLocationOverrides }: ReturnRout
                       className="w-full text-xs border rounded px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-500 flex items-center justify-between bg-white hover:bg-gray-50"
                     >
                       <span className="truncate">
-                        {driverTimeFilter.length === 0
+                        {safeDriverTimeFilter.length === 0
                           ? "All Times"
-                          : `${driverTimeFilter.length} time${
-                              driverTimeFilter.length > 1 ? "s" : ""
+                          : `${safeDriverTimeFilter.length} time${
+                              safeDriverTimeFilter.length > 1 ? "s" : ""
                             } selected`}
                       </span>
                       <ChevronDown className="w-3 h-3 text-gray-400 flex-shrink-0 ml-1" />
@@ -2685,7 +2794,7 @@ export function ReturnRoute({ onSaveRoute, driverLocationOverrides }: ReturnRout
                           <span className="text-xs font-medium text-gray-700">
                             Select Times
                           </span>
-                          {driverTimeFilter.length > 0 && (
+                          {safeDriverTimeFilter.length > 0 && (
                             <button
                               onClick={(e) => {
                                 e.stopPropagation();
@@ -2705,12 +2814,12 @@ export function ReturnRoute({ onSaveRoute, driverLocationOverrides }: ReturnRout
                           >
                             <input
                               type="checkbox"
-                              checked={driverTimeFilter.includes(time)}
+                              checked={safeDriverTimeFilter.includes(time)}
                               onChange={(e) => {
                                 e.stopPropagation();
-                                const next = driverTimeFilter.includes(time)
-                                  ? driverTimeFilter.filter((t) => t !== time)
-                                  : [...driverTimeFilter, time];
+                                const next = safeDriverTimeFilter.includes(time)
+                                  ? safeDriverTimeFilter.filter((t) => t !== time)
+                                  : [...safeDriverTimeFilter, time];
                                 setDriverTimeFilter(next);
                               }}
                               className="w-3.5 h-3.5 text-blue-600 rounded focus:ring-blue-500"
@@ -2730,7 +2839,7 @@ export function ReturnRoute({ onSaveRoute, driverLocationOverrides }: ReturnRout
                   </div>
 
                   {/* Active Filter Count */}
-                  {driverTimeFilter.length > 0 && (
+                  {safeDriverTimeFilter.length > 0 && (
                     <div className="mt-2 flex items-center justify-between">
                       <p className="text-xs text-gray-500">
                         {filteredDrivers.length} of {availableDrivers.length}{" "}
@@ -2920,10 +3029,10 @@ export function ReturnRoute({ onSaveRoute, driverLocationOverrides }: ReturnRout
                       className="w-full text-xs border rounded px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-green-500 flex items-center justify-between bg-white hover:bg-gray-50"
                     >
                       <span className="truncate">
-                        {timeFilter.length === 0
+                        {safeTimeFilter.length === 0
                           ? "All Times"
-                          : `${timeFilter.length} time${
-                              timeFilter.length > 1 ? "s" : ""
+                          : `${safeTimeFilter.length} time${
+                              safeTimeFilter.length > 1 ? "s" : ""
                             } selected`}
                       </span>
                       <ChevronDown className="w-3 h-3 text-gray-400 flex-shrink-0 ml-1" />
@@ -2935,7 +3044,7 @@ export function ReturnRoute({ onSaveRoute, driverLocationOverrides }: ReturnRout
                           <span className="text-xs font-medium text-gray-700">
                             Select Times
                           </span>
-                          {timeFilter.length > 0 && (
+                          {safeTimeFilter.length > 0 && (
                             <button
                               onClick={(e) => {
                                 e.stopPropagation();
@@ -2957,15 +3066,15 @@ export function ReturnRoute({ onSaveRoute, driverLocationOverrides }: ReturnRout
                             >
                               <input
                                 type="checkbox"
-                                checked={timeFilter.includes(time)}
+                                checked={safeTimeFilter.includes(time)}
                                 onChange={(e) => {
                                   e.stopPropagation();
-                                  if (timeFilter.includes(time)) {
+                                  if (safeTimeFilter.includes(time)) {
                                     setTimeFilter(
-                                      timeFilter.filter((t) => t !== time)
+                                      safeTimeFilter.filter((t) => t !== time)
                                     );
                                   } else {
-                                    setTimeFilter([...timeFilter, time]);
+                                    setTimeFilter([...safeTimeFilter, time]);
                                   }
                                 }}
                                 className="w-3.5 h-3.5 text-green-600 rounded focus:ring-green-500"
@@ -2988,7 +3097,7 @@ export function ReturnRoute({ onSaveRoute, driverLocationOverrides }: ReturnRout
                   {/* Active Filter Count */}
                   {(pickupCityFilter !== "All" ||
                     destinationCityFilter !== "All" ||
-                    timeFilter.length > 0) && (
+                    safeTimeFilter.length > 0) && (
                     <div className="mt-2 flex items-center justify-between">
                       <p className="text-xs text-gray-500">
                         {filteredPassengers.length} of{" "}
@@ -3457,16 +3566,18 @@ export function ReturnRoute({ onSaveRoute, driverLocationOverrides }: ReturnRout
                     <X className="w-4 h-4 mr-2" />
                     Clear
                   </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={queueRoute}
-                    disabled={!canQueueRoute}
-                    className="h-9"
-                  >
-                    <List className="w-4 h-4 mr-2" />
-                    Queue Route
-                  </Button>
+                  {showQueueButton && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={queueRoute}
+                      disabled={!canQueueRoute}
+                      className="h-9"
+                    >
+                      <List className="w-4 h-4 mr-2" />
+                      Queue Route
+                    </Button>
+                  )}
                   <Button onClick={saveRoute} className="h-9">
                     <Save className="w-4 h-4 mr-2" />
                     Save Route

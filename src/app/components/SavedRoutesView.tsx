@@ -4,7 +4,6 @@ import mapboxgl from "mapbox-gl";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 import { Button } from "./ui/button";
 
-import { Tabs, TabsList, TabsTrigger, TabsContent } from "./ui/tabs";
 import {
   Eye,
   EyeOff,
@@ -265,15 +264,15 @@ export function SavedRoutesView({
   const markersRef = useRef<mapboxgl.Marker[]>([]);
   const layerIdsRef = useRef<Set<string>>(new Set()); // Track all layer IDs
 
-  // Track active tab
-  const [activeTab, setActiveTab] = useState<"going" | "return">("going");
-
   // Track which routes are expanded/collapsed
   const [expandedRoutes, setExpandedRoutes] = useState<Set<string>>(new Set());
 
   const [showClearDialog, setShowClearDialog] = useState(false);
   const [showInfoDialog, setShowInfoDialog] = useState(false);
   const [infoDialogMessage, setInfoDialogMessage] = useState("");
+  const [clearRouteType, setClearRouteType] = useState<"going" | "return">(
+    "going"
+  );
 
   // Convert all drivers to locations with IDs
   const allDrivers = convertRidersToLocations([
@@ -289,9 +288,8 @@ export function SavedRoutesView({
     returnPassengersData as ShiftPassenger[]
   );
 
-  // Use the appropriate passenger dataset based on active tab
-  const allPassengers =
-    activeTab === "going" ? allGoingPassengers : allReturnPassengers;
+  const getPassengersDataset = (routeType: "going" | "return") =>
+    routeType === "going" ? allGoingPassengers : allReturnPassengers;
 
   const getDriverForRoute = (
     route: SavedRoute
@@ -301,7 +299,9 @@ export function SavedRoutesView({
   const getPassengersForRoute = (route: SavedRoute): RouteParticipantLike[] =>
     route.passengerSnapshots && route.passengerSnapshots.length > 0
       ? route.passengerSnapshots
-      : allPassengers.filter((p) => route.passengerIds.includes(p.id));
+      : getPassengersDataset(route.routeType).filter((p) =>
+          route.passengerIds.includes(p.id)
+        );
 
   useEffect(() => {
     if (!mapContainer.current || map.current) return;
@@ -336,7 +336,7 @@ export function SavedRoutesView({
     }
 
     renderSavedRoutes();
-  }, [savedRoutes, activeTab]); // Add activeTab to dependencies
+  }, [savedRoutes]);
 
   const renderSavedRoutes = () => {
     if (!map.current) return;
@@ -358,12 +358,9 @@ export function SavedRoutesView({
     // Clear the tracked layer IDs
     layerIdsRef.current.clear();
 
-    // Filter routes by active tab
-    const routesToShow = savedRoutes.filter(
-      (route) => route.routeType === activeTab
-    );
+    const routesToShow = savedRoutes;
 
-    // Add visible saved routes to map with markers (only from active tab)
+    // Add visible saved routes to map with markers
     routesToShow.forEach((route) => {
       if (!route.visible) return;
 
@@ -1062,15 +1059,18 @@ export function SavedRoutesView({
     routeColorMap.get(route.id) || route.color;
 
   // Toggle route expansion
-  const handleClearRoutesClick = () => {
+  const handleClearRoutesClick = (routeType: "going" | "return") => {
     if (!onClearRoutes) {
+      setInfoDialogMessage("Clear is not available in this view.");
+      setShowInfoDialog(true);
       return;
     }
+    setClearRouteType(routeType);
     setShowClearDialog(true);
   };
 
   const handleConfirmClearRoutes = () => {
-    onClearRoutes?.(activeTab);
+    onClearRoutes?.(clearRouteType);
     setShowClearDialog(false);
   };
 
@@ -1487,39 +1487,11 @@ export function SavedRoutesView({
 
   return (
     <div className="h-full flex overflow-hidden">
-      <div className="w-96 bg-white border-r overflow-y-auto">
+      <div className="w-[640px] bg-white border-r overflow-y-auto">
         <div className="p-4 space-y-4">
           <div>
-            <div className="flex">
+            <div className="flex items-center justify-between gap-3">
               <h2 className="text-xl font-bold">Saved Routes </h2>
-              <Button
-                onClick={handleClearRoutesClick}
-                size="sm"
-                variant="outline"
-                className="gap-2 text-red-500 hover:text-red-600 hover:bg-red-50"
-                disabled={
-                  activeTab === "going"
-                    ? goingRoutes.length === 0
-                    : returnRoutes.length === 0
-                }
-              >
-                <Trash2 className="w-4 h-4" />
-                Clear
-              </Button>
-              <Button
-                onClick={() => exportToExcel(activeTab)}
-                size="sm"
-                variant="outline"
-                className="gap-2"
-                disabled={
-                  activeTab === "going"
-                    ? goingRoutes.length === 0
-                    : returnRoutes.length === 0
-                }
-              >
-                <FileDown className="w-4 h-4" />
-                Export
-              </Button>
             </div>
 
             <p className="text-sm text-gray-600 mt-1">
@@ -1528,30 +1500,70 @@ export function SavedRoutesView({
             </p>
           </div>
 
-          <Tabs
-            defaultValue="going"
-            className="w-full"
-            onValueChange={(value) => setActiveTab(value as "going" | "return")}
-          >
-            <div className="flex items-center justify-between gap-2 mb-3">
-              <TabsList className="flex-1">
-                <TabsTrigger value="going" className="flex-1">
+          <div className="relative grid grid-cols-2 gap-0">
+            <div className="pointer-events-none absolute inset-y-0 left-1/2 w-px bg-gray-200"></div>
+            <div className="space-y-3 pr-3">
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-sm font-semibold">
                   Going Routes ({goingRoutes.length})
-                </TabsTrigger>
-                <TabsTrigger value="return" className="flex-1">
-                  Return Routes ({returnRoutes.length})
-                </TabsTrigger>
-              </TabsList>
+                </p>
+                <div className="flex items-center gap-2">
+                  <Button
+                    onClick={() => handleClearRoutesClick("going")}
+                    size="sm"
+                    variant="outline"
+                    className="gap-1 text-red-500 hover:text-red-600 hover:bg-red-50"
+                    disabled={goingRoutes.length === 0}
+                  >
+                    <Trash2 className="w-4 h-4" />
+                    Clear
+                  </Button>
+                  <Button
+                    onClick={() => exportToExcel("going")}
+                    size="sm"
+                    variant="outline"
+                    className="gap-1"
+                    disabled={goingRoutes.length === 0}
+                  >
+                    <FileDown className="w-4 h-4" />
+                    Export
+                  </Button>
+                </div>
+              </div>
+              {renderRouteCards(goingRoutes)}
             </div>
 
-            <TabsContent value="going" className="mt-4">
-              {renderRouteCards(goingRoutes)}
-            </TabsContent>
-
-            <TabsContent value="return" className="mt-4">
+            <div className="space-y-3 pl-3">
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-sm font-semibold">
+                  Return Routes ({returnRoutes.length})
+                </p>
+                <div className="flex items-center gap-2">
+                  <Button
+                    onClick={() => handleClearRoutesClick("return")}
+                    size="sm"
+                    variant="outline"
+                    className="gap-1 text-red-500 hover:text-red-600 hover:bg-red-50"
+                    disabled={returnRoutes.length === 0}
+                  >
+                    <Trash2 className="w-4 h-4" />
+                    Clear
+                  </Button>
+                  <Button
+                    onClick={() => exportToExcel("return")}
+                    size="sm"
+                    variant="outline"
+                    className="gap-1"
+                    disabled={returnRoutes.length === 0}
+                  >
+                    <FileDown className="w-4 h-4" />
+                    Export
+                  </Button>
+                </div>
+              </div>
               {renderRouteCards(returnRoutes)}
-            </TabsContent>
-          </Tabs>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -1587,7 +1599,7 @@ export function SavedRoutesView({
       />
       <ConfirmationDialog
         open={showClearDialog}
-        title={`Clear ${activeTab} routes?`}
+        title={`Clear ${clearRouteType} routes?`}
         description="This will remove all saved routes in the current tab."
         confirmLabel="Clear"
         cancelLabel="Cancel"

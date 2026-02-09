@@ -1,8 +1,13 @@
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { ArrowRight, ArrowLeft } from "lucide-react";
 import { useAppDispatch, useAppSelector } from "../../store/hooks";
-import { setCombinedStep } from "../../store/slices/filterSlice";
-import { addPendingGoingRoute } from "../../store/slices/routesSlice";
+import {
+  setCombinedStep,
+  setReturnDate,
+  setReturnShift,
+  setReturnDriver,
+} from "../../store/slices/filterSlice";
+import { addPendingGoingRoute, clearPendingGoingRoutes } from "../../store/slices/routesSlice";
 import { SavedRoute } from "../../types/route";
 import { CreateRoute } from "./CreateRoute";
 import { ReturnRoute } from "./ReturnRoute";
@@ -17,7 +22,10 @@ export function CombinedRoute({ savedRoutes, onSaveRoute }: CombinedRouteProps) 
   const combined = useAppSelector((state) => state.filters.combined) ?? {
     currentStep: "going" as const,
   };
+  const goingFilters = useAppSelector((state) => state.filters.going);
+  const returnFilters = useAppSelector((state) => state.filters.return);
   const pendingGoingRoutes = useAppSelector((state) => state.routes.pendingGoingRoutes) ?? [];
+  const [returnFetchTrigger, setReturnFetchTrigger] = useState(0);
 
   const currentStep = combined.currentStep ?? "going";
 
@@ -39,13 +47,35 @@ export function CombinedRoute({ savedRoutes, onSaveRoute }: CombinedRouteProps) 
     dispatch(setCombinedStep(step));
   };
 
+  useEffect(() => {
+    if (!goingFilters?.selectedDate || !goingFilters?.selectedShift) return;
+    if (returnFilters?.selectedDate !== goingFilters.selectedDate) {
+      dispatch(setReturnDate(goingFilters.selectedDate));
+    }
+    if (returnFilters?.selectedShift !== goingFilters.selectedShift) {
+      dispatch(setReturnShift(goingFilters.selectedShift));
+    }
+  }, [
+    dispatch,
+    goingFilters.selectedDate,
+    goingFilters.selectedShift,
+    returnFilters?.selectedDate,
+    returnFilters?.selectedShift,
+  ]);
+
   const handleGoingSave = (route: SavedRoute) => {
     dispatch(addPendingGoingRoute(route));
+    dispatch(setReturnDriver(route.driverId ?? null));
     dispatch(setCombinedStep("return"));
   };
 
   const handleReturnSave = (route: SavedRoute) => {
+    pendingGoingRoutes.forEach((pendingRoute) => {
+      onSaveRoute(pendingRoute);
+    });
     onSaveRoute(route);
+    dispatch(clearPendingGoingRoutes());
+    dispatch(setCombinedStep("going"));
   };
 
   return (
@@ -83,9 +113,22 @@ export function CombinedRoute({ savedRoutes, onSaveRoute }: CombinedRouteProps) 
       {/* Route Builder Content */}
       <div className="flex-1 overflow-hidden">
         {currentStep === "going" ? (
-          <CreateRoute savedRoutes={savedRoutes} onSaveRoute={handleGoingSave} />
+          <CreateRoute
+            savedRoutes={savedRoutes}
+            onSaveRoute={handleGoingSave}
+            onFetchCombined={() => setReturnFetchTrigger((prev) => prev + 1)}
+            showQueueButton={false}
+          />
         ) : (
-          <ReturnRoute onSaveRoute={handleReturnSave} driverLocationOverrides={driverLocationOverrides} />
+          <ReturnRoute
+            onSaveRoute={handleReturnSave}
+            driverLocationOverrides={driverLocationOverrides}
+            fetchTrigger={returnFetchTrigger}
+            showQueueButton={false}
+            combinedQueuedDrivers={pendingGoingRoutes
+              .map((route) => route.driverSnapshot)
+              .filter((driver): driver is NonNullable<typeof driver> => Boolean(driver))}
+          />
         )}
       </div>
     </div>

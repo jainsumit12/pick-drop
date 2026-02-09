@@ -75,6 +75,8 @@ interface Location {
 interface CreateRouteProps {
   savedRoutes: SavedRoute[];
   onSaveRoute: (route: SavedRoute) => void;
+  onFetchCombined?: () => void;
+  showQueueButton?: boolean;
 }
 
 const extractCleanName = (fullName: string): string => {
@@ -157,7 +159,13 @@ const convertRidersToLocations = (
   return riders.flatMap((rider) => {
     const lat = parseCoordinate(rider.HOME_LAT);
     const log = parseCoordinate(rider.HOME_LOG);
-    if (rider.SHIFT !== shift || lat === null || log === null) return [];
+    if (
+      normalizeShift(rider.SHIFT) !== normalizeShift(shift) ||
+      lat === null ||
+      log === null
+    ) {
+      return [];
+    }
 
     return [
       {
@@ -183,7 +191,11 @@ const convertPassengersToLocations = (
   return passengers.flatMap((passenger, index) => {
     const pickupLat = parseCoordinate(passenger.PICKUP_LAT);
     const pickupLog = parseCoordinate(passenger.PICKUP_LOG);
-    if (passenger.SHIFT !== shift || pickupLat === null || pickupLog === null) {
+    if (
+      normalizeShift(passenger.SHIFT) !== normalizeShift(shift) ||
+      pickupLat === null ||
+      pickupLog === null
+    ) {
       return [];
     }
 
@@ -210,7 +222,12 @@ const convertPassengersToLocations = (
   });
 };
 
-export function CreateRoute({ savedRoutes, onSaveRoute }: CreateRouteProps) {
+export function CreateRoute({
+  savedRoutes,
+  onSaveRoute,
+  onFetchCombined,
+  showQueueButton = true,
+}: CreateRouteProps) {
   const dispatch = useAppDispatch();
   const {
     selectedDate,
@@ -319,6 +336,11 @@ export function CreateRoute({ savedRoutes, onSaveRoute }: CreateRouteProps) {
   const [showTimeDropdown, setShowTimeDropdown] = useState(false);
   const [showDriverTimeDropdown, setShowDriverTimeDropdown] = useState(false);
 
+  const safeTimeFilter = Array.isArray(timeFilter) ? timeFilter : [];
+  const safeDriverTimeFilter = Array.isArray(driverTimeFilter)
+    ? driverTimeFilter
+    : [];
+
   // Bottom panel state
   const [showBottomPanel, setShowBottomPanel] = useState(false);
   const [showClearDialog, setShowClearDialog] = useState(false);
@@ -411,19 +433,6 @@ export function CreateRoute({ savedRoutes, onSaveRoute }: CreateRouteProps) {
     setCheckedDrivers([]);
   }, [normalizedShift, selectedDate, savedRouteData]);
 
-  // Auto-fetch data when component mounts and there's no cached data
-  useEffect(() => {
-    const cacheKey = `${selectedDate}-${normalizedShift}`;
-    const hasReduxData =
-      (savedRouteData?.drivers?.length ?? 0) > 0 ||
-      (savedRouteData?.passengers?.length ?? 0) > 0;
-
-    // Auto-fetch if no cached data and haven't fetched for this date/shift combination
-    if (!hasReduxData && hasFetchedRef.current !== cacheKey && !driversLoading && !passengersLoading) {
-      hasFetchedRef.current = cacheKey;
-      fetchRouteParticipants();
-    }
-  }, [selectedDate, normalizedShift, savedRouteData, driversLoading, passengersLoading]);
 
   // Ensure current color is unique when pending or saved routes change
   useEffect(() => {
@@ -540,7 +549,7 @@ export function CreateRoute({ savedRoutes, onSaveRoute }: CreateRouteProps) {
 
   // Extract unique filter options from passenger data
   const rawPassengerData = passengersData.filter(
-    (p) => p.SHIFT === selectedShift
+    (p) => normalizeShift(p.SHIFT) === normalizeShift(selectedShift)
   );
   const pickupCities = [
     "All",
@@ -556,7 +565,9 @@ export function CreateRoute({ savedRoutes, onSaveRoute }: CreateRouteProps) {
   ];
 
   // Extract unique driver times
-  const rawDriverData = driversData.filter((r) => r.SHIFT === selectedShift);
+  const rawDriverData = driversData.filter(
+    (r) => normalizeShift(r.SHIFT) === normalizeShift(selectedShift)
+  );
   const driverTimes = Array.from(
     new Set(
       rawDriverData.map((r) => normalizeTime(r.TIME || "")).filter(Boolean)
@@ -581,14 +592,16 @@ export function CreateRoute({ savedRoutes, onSaveRoute }: CreateRouteProps) {
     const originalTime = normalizeTime(originalDriver?.TIME || "");
 
     // If no time filter selected, show all drivers that match search
-    if (driverTimeFilter?.length === 0) {
+    if (safeDriverTimeFilter.length === 0) {
       return matchesSearch;
     }
 
     // If time filter selected, require the driver's time to be in the filter (match passenger logic)
     const matchesTime =
       originalTime !== "" &&
-      driverTimeFilter?.map((t) => normalizeTime(t))?.includes(originalTime);
+      safeDriverTimeFilter
+        .map((t) => normalizeTime(t))
+        .includes(originalTime);
 
     return matchesSearch && matchesTime;
   });
@@ -620,8 +633,8 @@ export function CreateRoute({ savedRoutes, onSaveRoute }: CreateRouteProps) {
     );
 
     const matchesTime =
-      timeFilter?.length === 0 ||
-      timeFilter?.includes(originalPassenger?.TIME || "");
+      safeTimeFilter.length === 0 ||
+      safeTimeFilter.includes(originalPassenger?.TIME || "");
 
     return (
       matchesSearch &&
@@ -2660,10 +2673,10 @@ export function CreateRoute({ savedRoutes, onSaveRoute }: CreateRouteProps) {
                       className="w-full text-xs border rounded px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-500 flex items-center justify-between bg-white hover:bg-gray-50"
                     >
                       <span className="truncate">
-                        {driverTimeFilter?.length === 0
+                        {safeDriverTimeFilter.length === 0
                           ? "All Times"
-                          : `${driverTimeFilter?.length} time${
-                              driverTimeFilter?.length > 1 ? "s" : ""
+                          : `${safeDriverTimeFilter.length} time${
+                              safeDriverTimeFilter.length > 1 ? "s" : ""
                             } selected`}
                       </span>
                       <ChevronDown className="w-3 h-3 text-gray-400 flex-shrink-0 ml-1" />
@@ -2675,7 +2688,7 @@ export function CreateRoute({ savedRoutes, onSaveRoute }: CreateRouteProps) {
                           <span className="text-xs font-medium text-gray-700">
                             Select Times
                           </span>
-                          {driverTimeFilter?.length > 0 && (
+                          {safeDriverTimeFilter.length > 0 && (
                             <button
                               onClick={(e) => {
                                 e.stopPropagation();
@@ -2695,12 +2708,12 @@ export function CreateRoute({ savedRoutes, onSaveRoute }: CreateRouteProps) {
                           >
                             <input
                               type="checkbox"
-                              checked={driverTimeFilter.includes(time)}
+                              checked={safeDriverTimeFilter.includes(time)}
                               onChange={(e) => {
                                 e.stopPropagation();
-                                const next = driverTimeFilter.includes(time)
-                                  ? driverTimeFilter.filter((t) => t !== time)
-                                  : [...driverTimeFilter, time];
+                                const next = safeDriverTimeFilter.includes(time)
+                                  ? safeDriverTimeFilter.filter((t) => t !== time)
+                                  : [...safeDriverTimeFilter, time];
                                 setDriverTimeFilter(next);
                               }}
                               className="w-3.5 h-3.5 text-blue-600 rounded focus:ring-blue-500"
@@ -2720,7 +2733,7 @@ export function CreateRoute({ savedRoutes, onSaveRoute }: CreateRouteProps) {
                   </div>
 
                   {/* Active Filter Count */}
-                  {driverTimeFilter?.length > 0 && (
+                  {safeDriverTimeFilter.length > 0 && (
                     <div className="mt-2 flex items-center justify-between">
                       <p className="text-xs text-gray-500">
                         {filteredDrivers?.length} of {availableDrivers?.length}{" "}
@@ -2913,10 +2926,10 @@ export function CreateRoute({ savedRoutes, onSaveRoute }: CreateRouteProps) {
                       className="w-full text-xs border rounded px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-green-500 flex items-center justify-between bg-white hover:bg-gray-50"
                     >
                       <span className="truncate">
-                        {timeFilter?.length === 0
+                        {safeTimeFilter.length === 0
                           ? "All Times"
-                          : `${timeFilter?.length} time${
-                              timeFilter?.length > 1 ? "s" : ""
+                          : `${safeTimeFilter.length} time${
+                              safeTimeFilter.length > 1 ? "s" : ""
                             } selected`}
                       </span>
                       <ChevronDown className="w-3 h-3 text-gray-400 flex-shrink-0 ml-1" />
@@ -2928,7 +2941,7 @@ export function CreateRoute({ savedRoutes, onSaveRoute }: CreateRouteProps) {
                           <span className="text-xs font-medium text-gray-700">
                             Select Times
                           </span>
-                          {timeFilter?.length > 0 && (
+                          {safeTimeFilter.length > 0 && (
                             <button
                               onClick={(e) => {
                                 e.stopPropagation();
@@ -2950,15 +2963,15 @@ export function CreateRoute({ savedRoutes, onSaveRoute }: CreateRouteProps) {
                             >
                               <input
                                 type="checkbox"
-                                checked={timeFilter.includes(time)}
+                                checked={safeTimeFilter.includes(time)}
                                 onChange={(e) => {
                                   e.stopPropagation();
-                                  if (timeFilter.includes(time)) {
+                                  if (safeTimeFilter.includes(time)) {
                                     setTimeFilter(
-                                      timeFilter.filter((t) => t !== time)
+                                      safeTimeFilter.filter((t) => t !== time)
                                     );
                                   } else {
-                                    setTimeFilter([...timeFilter, time]);
+                                    setTimeFilter([...safeTimeFilter, time]);
                                   }
                                 }}
                                 className="w-3.5 h-3.5 text-green-600 rounded focus:ring-green-500"
@@ -2981,7 +2994,7 @@ export function CreateRoute({ savedRoutes, onSaveRoute }: CreateRouteProps) {
                   {/* Active Filter Count */}
                   {(pickupCityFilter !== "All" ||
                     destinationCityFilter !== "All" ||
-                    timeFilter?.length > 0) && (
+                    safeTimeFilter.length > 0) && (
                     <div className="mt-2 flex items-center justify-between">
                       <p className="text-xs text-gray-500">
                         {filteredPassengers?.length} of {availablePassengers?.length}{" "}
@@ -3258,7 +3271,10 @@ export function CreateRoute({ savedRoutes, onSaveRoute }: CreateRouteProps) {
             <Button
               variant="outline"
               size="sm"
-              onClick={fetchRouteParticipants}
+              onClick={() => {
+                fetchRouteParticipants();
+                onFetchCombined?.();
+              }}
               disabled={driversLoading || passengersLoading}
               className="h-8 sm:h-9 px-2 sm:px-3"
             >
@@ -3473,16 +3489,18 @@ export function CreateRoute({ savedRoutes, onSaveRoute }: CreateRouteProps) {
                     <X className="w-4 h-4 mr-2" />
                     Clear
                   </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={queueRoute}
-                    disabled={!canQueueRoute}
-                    className="h-9"
-                  >
-                    <List className="w-4 h-4 mr-2" />
-                    Queue Route
-                  </Button>
+                  {showQueueButton && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={queueRoute}
+                      disabled={!canQueueRoute}
+                      className="h-9"
+                    >
+                      <List className="w-4 h-4 mr-2" />
+                      Queue Route
+                    </Button>
+                  )}
                   <Button onClick={saveRoute} className="h-9">
                     <Save className="w-4 h-4 mr-2" />
                     Save Route
