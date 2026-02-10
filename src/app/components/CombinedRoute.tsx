@@ -66,6 +66,7 @@ export function CombinedRoute({ savedRoutes, onSaveRoute }: CombinedRouteProps) 
   const handleGoingSave = (route: SavedRoute) => {
     dispatch(addPendingGoingRoute(route));
     dispatch(setReturnDriver(route.driverId ?? null));
+    setReturnFetchTrigger((prev) => prev + 1);
     dispatch(setCombinedStep("return"));
   };
 

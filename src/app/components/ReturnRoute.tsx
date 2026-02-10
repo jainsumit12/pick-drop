@@ -481,7 +481,6 @@ export function ReturnRoute({
   const combinedOverrideDrivers = combinedQueuedDrivers
     ? combinedQueuedDrivers
         .map((d) => snapshotToLocation(d, "driver"))
-        .filter((d) => normalizeShift(d.shiftTime) === normalizeShift(selectedShift))
         .map((d) => {
           const override = driverLocationOverrides?.[d.id];
           return override ? { ...d, coordinates: override } : d;
