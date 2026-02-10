@@ -111,8 +111,6 @@ const normalizeTime = (time: string): string => {
   return trimmed;
 };
 
-const normalizeAddress = (address: string): string =>
-  address.trim().toLowerCase();
 
 const formatDateForApi = (date: string): string => {
   const [year, month, day] = date.split("-");
@@ -524,9 +522,6 @@ export function CreateRoute({
   const currentDriver = availableDrivers.find((d) => d.id === selectedDriver);
   const occupiedDriverCount = occupiedDrivers.length;
   const totalDriverCount = drivers.length;
-  const normalizedDriverAddress = currentDriver
-    ? normalizeAddress(currentDriver.address)
-    : null;
 
   const selectedPassengerSet = new Set(selectedPassengers.map((s) => String(s)));
   const baseAvailablePassengers = passengers.filter(
@@ -534,12 +529,7 @@ export function CreateRoute({
       !usedPassengerIds.has(String(passenger.id)) ||
       selectedPassengerSet.has(String(passenger.id))
   );
-  const availablePassengers = normalizedDriverAddress
-    ? baseAvailablePassengers.filter(
-        (passenger) =>
-          normalizeAddress(passenger.address) !== normalizedDriverAddress
-      )
-    : baseAvailablePassengers;
+  const availablePassengers = baseAvailablePassengers;
 
   const displayDriverCount =
     driversData?.length > 0
@@ -650,20 +640,13 @@ export function CreateRoute({
 
   useEffect(() => {
     if (!currentDriver || selectedPassengers?.length === 0) return;
-    const nextPassengers = selectedPassengers.filter((id) => {
-      const passenger = baseAvailablePassengers.find((p) => String(p.id) === String(id));
-      if (!passenger) return true;
-      return normalizeAddress(passenger.address) !== normalizedDriverAddress;
-    });
+    const nextPassengers = selectedPassengers.filter((id) =>
+      baseAvailablePassengers.some((p) => String(p.id) === String(id))
+    );
     if (nextPassengers?.length !== selectedPassengers?.length) {
       setSelectedPassengers(nextPassengers);
     }
-  }, [
-    currentDriver,
-    baseAvailablePassengers,
-    normalizedDriverAddress,
-    selectedPassengers,
-  ]);
+  }, [currentDriver, baseAvailablePassengers, selectedPassengers]);
 
   useEffect(() => {
     if (!mapContainer.current || map.current) return;
@@ -3511,7 +3494,7 @@ export function CreateRoute({
           </div>
         )}
         {pendingRoutes.length > 0 && (
-          <div className="absolute bottom-32 right-4 z-40 w-96 max-h-[480px]">
+          <div className="absolute bottom-32 left-4 z-40 w-96 max-h-[480px]">
             <div className="flex flex-col gap-3 rounded-2xl border bg-white p-3 shadow-lg">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">

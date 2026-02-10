@@ -3588,7 +3588,7 @@ export function ReturnRoute({
           </div>
         )}
         {pendingRoutes.length > 0 && (
-          <div className="absolute bottom-32 right-4 z-40 w-96 max-h-[480px]">
+          <div className="absolute bottom-32 left-4 z-40 w-96 max-h-[480px]">
             <div className="flex flex-col gap-3 rounded-2xl border bg-white p-3 shadow-lg">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
