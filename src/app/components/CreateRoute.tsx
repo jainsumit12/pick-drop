@@ -54,6 +54,7 @@ import {
   addPendingGoingRoute,
   removePendingGoingRoute,
   clearPendingGoingRoutes,
+  togglePendingGoingRouteVisibility,
 } from "../../store/slices/routesSlice";
 import { SHIFT_TYPES, normalizeShift } from "../../constants/shifts";
 
@@ -305,7 +306,6 @@ export function CreateRoute({
   const [passengersLoading, setPassengersLoading] = useState(false);
   const [passengersError, setPassengersError] = useState<string | null>(null);
   // pendingRoutes now comes from Redux (pendingGoingRoutes)
-  const [hiddenQueuedRoutes, setHiddenQueuedRoutes] = useState<Set<string>>(new Set());
   const [editingQueuedRoute, setEditingQueuedRoute] = useState<{
     id: string;
     name: string;
@@ -487,9 +487,7 @@ export function CreateRoute({
     if (id) usedPassengerIds.add(id);
   });
 
-  const visiblePendingRoutes = pendingRoutes.filter(
-    (route) => !hiddenQueuedRoutes.has(route.id)
-  );
+  const visiblePendingRoutes = pendingRoutes.filter((route) => route.visible !== false);
 
   const queuedDriverColorMap = new Map<string, string>();
   const queuedPassengerColorMap = new Map<string, string>();
@@ -776,7 +774,6 @@ export function CreateRoute({
     driverSearch,
     checkedDrivers,
     pendingRoutes,
-    hiddenQueuedRoutes,
   ]);
 
   const updateMarkersAndRoute = () => {
@@ -2362,7 +2359,7 @@ export function CreateRoute({
     queuedLayerIdsRef.current.clear();
 
     pendingRoutes
-      .filter((route) => !hiddenQueuedRoutes.has(route.id))
+      .filter((route) => route.visible !== false)
       .forEach((route) => {
         const layerId = `queued-route-going-${route.id}`;
         queuedLayerIdsRef.current.add(layerId);
@@ -2407,7 +2404,7 @@ export function CreateRoute({
     }
 
     renderQueuedRoutes();
-  }, [pendingRoutes, hiddenQueuedRoutes]);
+  }, [pendingRoutes]);
 
   const saveRoute = () => {
     const editingRoute = editingRouteId
@@ -3538,20 +3535,12 @@ export function CreateRoute({
                             type="button"
                             onClick={(event) => {
                               event.stopPropagation();
-                              setHiddenQueuedRoutes((prev) => {
-                                const next = new Set(prev);
-                                if (next.has(route.id)) {
-                                  next.delete(route.id);
-                                } else {
-                                  next.add(route.id);
-                                }
-                                return next;
-                              });
+                              dispatch(togglePendingGoingRouteVisibility(route.id));
                             }}
                             className="p-1 rounded hover:bg-gray-100"
                             aria-label="Toggle queued route visibility"
                           >
-                            {hiddenQueuedRoutes.has(route.id) ? (
+                            {route.visible === false ? (
                               <EyeOff className="w-4 h-4 text-gray-400" />
                             ) : (
                               <Eye className="w-4 h-4" style={{ color: route.color.primary }} />

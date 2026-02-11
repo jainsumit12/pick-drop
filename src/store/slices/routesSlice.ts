@@ -37,7 +37,7 @@ const routesSlice = createSlice({
     },
     addPendingGoingRoute: (state, action: PayloadAction<SavedRoute>) => {
       if (!state.pendingGoingRoutes) state.pendingGoingRoutes = [];
-      state.pendingGoingRoutes.push(action.payload);
+      state.pendingGoingRoutes.push({ ...action.payload, visible: action.payload.visible ?? true });
     },
     removePendingGoingRoute: (state, action: PayloadAction<string>) => {
       state.pendingGoingRoutes = (state.pendingGoingRoutes || []).filter(r => r.id !== action.payload);
@@ -48,9 +48,15 @@ const routesSlice = createSlice({
     clearPendingGoingRoutes: (state) => {
       state.pendingGoingRoutes = [];
     },
+    togglePendingGoingRouteVisibility: (state, action: PayloadAction<string>) => {
+      const route = (state.pendingGoingRoutes || []).find((r) => r.id === action.payload);
+      if (route) {
+        route.visible = !route.visible;
+      }
+    },
     addPendingReturnRoute: (state, action: PayloadAction<SavedRoute>) => {
       if (!state.pendingReturnRoutes) state.pendingReturnRoutes = [];
-      state.pendingReturnRoutes.push(action.payload);
+      state.pendingReturnRoutes.push({ ...action.payload, visible: action.payload.visible ?? true });
     },
     removePendingReturnRoute: (state, action: PayloadAction<string>) => {
       state.pendingReturnRoutes = (state.pendingReturnRoutes || []).filter(r => r.id !== action.payload);
@@ -60,6 +66,12 @@ const routesSlice = createSlice({
     },
     clearPendingReturnRoutes: (state) => {
       state.pendingReturnRoutes = [];
+    },
+    togglePendingReturnRouteVisibility: (state, action: PayloadAction<string>) => {
+      const route = (state.pendingReturnRoutes || []).find((r) => r.id === action.payload);
+      if (route) {
+        route.visible = !route.visible;
+      }
     },
   },
 });
@@ -74,9 +86,11 @@ export const {
   removePendingGoingRoute,
   setPendingGoingRoutes,
   clearPendingGoingRoutes,
+  togglePendingGoingRouteVisibility,
   addPendingReturnRoute,
   removePendingReturnRoute,
   setPendingReturnRoutes,
   clearPendingReturnRoutes,
+  togglePendingReturnRouteVisibility,
 } = routesSlice.actions;
 export default routesSlice.reducer;
