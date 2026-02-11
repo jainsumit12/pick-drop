@@ -239,18 +239,7 @@ const convertReturnPassengersToLocations = (
   return allLocations;
 };
 
-const ROUTE_COLORS = [
-  { primary: "#3b82f6", name: "Blue" },
-  { primary: "#8b5cf6", name: "Purple" },
-  { primary: "#ec4899", name: "Pink" },
-  { primary: "#f59e0b", name: "Orange" },
-  { primary: "#10b981", name: "Green" },
-  { primary: "#ef4444", name: "Red" },
-  { primary: "#06b6d4", name: "Cyan" },
-  { primary: "#f97316", name: "Dark Orange" },
-  { primary: "#14b8a6", name: "Teal" },
-  { primary: "#a855f7", name: "Violet" },
-];
+type RouteColor = { primary: string; name: string };
 
 export function SavedRoutesView({
   savedRoutes,
@@ -1046,13 +1035,15 @@ export function SavedRoutesView({
     .filter((route) => route.routeType === "return")
     .sort((a, b) => extractRouteNumber(a.name) - extractRouteNumber(b.name));
 
-  // Map each route ID to a unique color based on its index within its type
-  const routeColorMap = new Map<string, typeof ROUTE_COLORS[number]>();
-  goingRoutes.forEach((route, index) => {
-    routeColorMap.set(route.id, ROUTE_COLORS[index % ROUTE_COLORS.length]);
-  });
-  returnRoutes.forEach((route, index) => {
-    routeColorMap.set(route.id, ROUTE_COLORS[index % ROUTE_COLORS.length]);
+  // Map each route ID to a distinct color across all routes in this view.
+  const routeColorMap = new Map<string, RouteColor>();
+  const allRoutesForColor = [...goingRoutes, ...returnRoutes];
+  allRoutesForColor.forEach((route, index) => {
+    const hue = Math.round((index * 137.508) % 360); // golden-angle hue stepping
+    routeColorMap.set(route.id, {
+      primary: `hsl(${hue}, 78%, 46%)`,
+      name: `Color ${index + 1}`,
+    });
   });
 
   const getRouteColor = (route: SavedRoute) =>
