@@ -1201,17 +1201,17 @@ export function ReturnRoute({
         el.style.cursor = "default";
         el.innerHTML = `
           <div style="
-            background-color: #6b7280;
+            background-color: #000000;
             color: white;
-            font-size: 9px;
+            font-size: 11px;
             font-weight: 700;
-            width: 18px;
-            height: 18px;
-            border-radius: 9px;
+            width: 26px;
+            height: 26px;
+            border-radius: 13px;
             display: flex;
             align-items: center;
             justify-content: center;
-            box-shadow: 0 1px 2px rgba(0,0,0,0.25);
+            box-shadow: 0 2px 6px rgba(0,0,0,0.35);
           ">H</div>
         `;
 
